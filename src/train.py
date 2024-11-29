@@ -182,8 +182,8 @@ def launch():
     args.features = ['Stage3_OutputPower',
     'Stage3_Piezo',
     'stepper_diff']
-    #args.device = "cuda"
-    args.device = "cpu"
+    args.device = "cuda:0"
+    #args.device = "cpu"
     args.lr = 1e-3
     args.grad_acc = 1
     args.sample_freq = 0

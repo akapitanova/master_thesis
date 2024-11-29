@@ -213,7 +213,8 @@ class GaussianDiffusion:
         Same usage as p_sample_loop_progressive().
         """
         indices = list(range(self.noise_steps))[::-1]
-        img = torch.randn((n, 1, self.img_height, self.img_width), device=device)
+        #img = torch.randn((n, 1, self.img_height, self.img_width), device=device)
+        img = torch.randn((n, 1, self.length), device=device)
         for i in tqdm(indices):
             t = torch.tensor([i] * len(img), device=device)
             with torch.no_grad():

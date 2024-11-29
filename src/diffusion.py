@@ -95,6 +95,7 @@ class GaussianDiffusion:
 
         # Add channel dimension back
         noised_vector = torch.unsqueeze(noised_vector, 1)
+        eps = torch.unsqueeze(eps, 1)
 
         return noised_vector, eps
 

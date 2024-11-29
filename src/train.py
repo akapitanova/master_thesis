@@ -50,10 +50,11 @@ def train(args, model=None, finetune=False):
     y_train = args.y_train
 
     train_dataset = CustomDataset(x_train, y_train)
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False)
 
-#    for i, data in enumerate(train_dataloader):
-#        print(data['data'].shape)
+    for i, data in enumerate(train_dataloader):
+        if i == 282:
+            print(data['data'])
 
     gradient_acc = args.grad_acc
     l = len(train_dataloader)
@@ -110,6 +111,7 @@ def train(args, model=None, finetune=False):
                 settings = None
 
             predicted_noise = model(x_t, t, settings)
+
 
             loss = mse(noise, predicted_noise)
 
@@ -185,7 +187,7 @@ def launch():
     args.lr = 1e-3
     args.grad_acc = 1
     args.sample_freq = 0
-    data_path = "../data/processed_data_stg3.csv"
+    data_path = "../data/train_data.csv"
     args.x_train, args.y_train = get_data(data_path)
     #args.sample_settings = [32.,15.,15.]
     # cond vector pro zkusebni datapoint behem prubezneho ukladani v trenovani

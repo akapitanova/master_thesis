@@ -256,6 +256,7 @@ class UNet_conditional(nn.Module):
         #    t += y
         #print(x.shape)
         #print(x)
+        x = torch.unsqueeze(x, 1)
 
         x1 = self.inc(x)
         x2 = self.down1(x1, t)
@@ -276,5 +277,7 @@ class UNet_conditional(nn.Module):
         x = self.up3(x, x1, t)
         x = self.sa6(x)
         output = self.outc(x)
+
+        output = torch.squeeze(output, 1)
         return output
 

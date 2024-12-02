@@ -85,7 +85,7 @@ class GaussianDiffusion:
         sqrt_one_minus_alpha_hat = torch.sqrt(1 - self.alpha_hat[t])[:, None]
 
         # Remove channel dimenson
-        x = torch.squeeze(x, 1)
+        #x = torch.squeeze(x, 1)
 
         if eps == None:
             eps = torch.randn_like(x)
@@ -94,8 +94,8 @@ class GaussianDiffusion:
         noised_vector = sqrt_alpha_hat * x + sqrt_one_minus_alpha_hat * eps
 
         # Add channel dimension back
-        noised_vector = torch.unsqueeze(noised_vector, 1)
-        eps = torch.unsqueeze(eps, 1)
+        #noised_vector = torch.unsqueeze(noised_vector, 1)
+        #eps = torch.unsqueeze(eps, 1)
 
         return noised_vector, eps
 
@@ -214,8 +214,9 @@ class GaussianDiffusion:
         """
         indices = list(range(self.noise_steps))[::-1]
         #img = torch.randn((n, 1, self.img_height, self.img_width), device=device)
-        img = torch.randn((n, 1, self.length), device=device)
-        for i in tqdm(indices):
+        img = torch.randn((n, self.length), device=device)
+        #for i in tqdm(indices, desc=f"ddim sample loop"):
+        for i in indices:
             t = torch.tensor([i] * len(img), device=device)
             with torch.no_grad():
                 out = self.ddim_sample(model,
@@ -315,11 +316,19 @@ class GaussianDiffusion:
 
     def _predict_xstart_from_eps(self, x_t, t, eps):
         # return self.sqrt_recip_alpha_hat[t][:, None, None, None] * x_t - self.sqrt_recipm1_alpha_hat[t][:, None, None, None] * eps
-        return self.sqrt_recip_alpha_hat[t][:, None] * x_t - self.sqrt_recipm1_alpha_hat[t][:, None] * eps
+        #x_t = torch.squeeze(x_t, 1)
+        #eps = torch.squeeze(eps, 1)
+        res = self.sqrt_recip_alpha_hat[t][:, None] * x_t - self.sqrt_recipm1_alpha_hat[t][:, None] * eps
+        #res = torch.unsqueeze(res, 1)
+        return res
 
     def _predict_eps_from_xstart(self, x_t, t, pred_xstart):
         # return (self.sqrt_recip_alpha_hat[t][:, None, None, None] * x_t - pred_xstart) / self.sqrt_recipm1_alpha_hat[t][:, None, None, None]
-        return (self.sqrt_recip_alpha_hat[t][:, None] * x_t - pred_xstart) / self.sqrt_recipm1_alpha_hat[t][:, None]
+        #x_t = torch.squeeze(x_t, 1)
+        #pred_xstart = torch.squeeze(pred_xstart, 1)
+        res = (self.sqrt_recip_alpha_hat[t][:, None] * x_t - pred_xstart) / self.sqrt_recipm1_alpha_hat[t][:, None]
+        #res = torch.unsqueeze(res, 1)
+        return res
 
     def q_posterior_mean_variance(self, x_start, x_t, t):
         """

@@ -50,11 +50,11 @@ def train(args, model=None, finetune=False):
     y_train = args.y_train
 
     train_dataset = CustomDataset(x_train, y_train)
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False)
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
 
-    for i, data in enumerate(train_dataloader):
-        if i == 282:
-            print(data['data'])
+    #for i, data in enumerate(train_dataloader):
+    #    if i == 282:
+    #        print(data['data'])
 
     gradient_acc = args.grad_acc
     l = len(train_dataloader)
@@ -125,6 +125,8 @@ def train(args, model=None, finetune=False):
 
             logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
 
+            break
+
         if args.sample_freq and epoch % args.sample_freq == 0:# and epoch > 0:
             settings = torch.Tensor(args.sample_settings).to(device).unsqueeze(0)
             ema_sampled_vectors = sampler.ddim_sample_loop(model=ema_model,
@@ -171,8 +173,8 @@ def launch():
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
     args.run_name = "test"
-    #args.epochs = 601
-    args.epochs = 1
+    args.epochs = 601
+    #args.epochs = 1
     args.noise_steps = 1000
     args.beta_start = 1e-4
     args.beta_end = 0.02

@@ -1,11 +1,13 @@
+import torch
 import torch.nn as nn
+import numpy as np
 from modules import UNet_conditional
 from diffusion import *
 from utils import *
 
 
 def predict(model,
-            sampler, 
+            sampler,
             test_dl,
             device,
             n_samples=4):
@@ -19,11 +21,9 @@ def predict(model,
 
     with torch.no_grad():
         for i, data in enumerate(tqdm(test_dl, desc="Testing loop")):
-            # for i, data in enumerate(test_dl):
             vectors = data['data'].to(device)
             settings = data['settings'].to(device)
 
-            # with autocast(device_type=device, dtype=torch.float16):
             pred = sampler.ddim_sample_loop(model=model,
                                             y=settings,
                                             cfg_scale=1,
@@ -32,9 +32,9 @@ def predict(model,
                                             n=n_samples
                                             )
 
-            # we move predictions to cpu, in case they are stored on GPU
-            x_real.extend(vectors.cpu().tolist())
+            x_real.extend(vectors.cpu().tolist() * n_samples)
             predictions.extend(pred.cpu().tolist())
+            print(i)
 
     return x_real, predictions
 
@@ -43,8 +43,7 @@ def evaluate(model,
              sampler,
              device,
              test_csv_path,
-             n_samples=4,
-             batch_size=4):
+             n_samples=3):
     """
     Evaluate predictions
     """
@@ -53,7 +52,7 @@ def evaluate(model,
 
     test_dataset = CustomDataset(x_test, y_test)
     test_dataloader = DataLoader(test_dataset,
-                                 batch_size=batch_size,
+                                 batch_size=1,
                                  shuffle=False)
 
     x_real, predictions = predict(model,
@@ -65,7 +64,7 @@ def evaluate(model,
     mse_errors = []
 
     for i, pred in enumerate(predictions):
-        err = mse(pred, x_real[i])
+        err = mse(torch.FloatTensor(pred), torch.FloatTensor(x_real[i]))
         mse_errors.append(err)
 
     return mse_errors
@@ -76,7 +75,6 @@ def main():
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Using device:', device)
-    print()
 
     model = UNet_conditional(length=1024,
                              feat_num=3,
@@ -94,6 +92,10 @@ def main():
                           sampler,
                           device,
                           "../data/test_data.csv")
+
+    print(mse_errors)
+    mean_err = np.mean(mse_errors)
+    print(f"Mean test mse error: {mean_err}")
 
 if __name__ == '__main__':
     main()

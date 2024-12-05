@@ -189,9 +189,11 @@ class GaussianDiffusion:
 
 
         # normalization to back numbers, for intensities: lower_bound=0, upper_bound=3925
-        final["sample"] = (final["sample"].clamp(-1, 1) + 1) / 2
+        #final["sample"] = (final["sample"].clamp(-1, 1) + 1) / 2
         #final["sample"] = (final["sample"] * 255).type(torch.uint8)
-        final["sample"] = (final["sample"] * 3925).type(torch.uint8)
+        #final["sample"] = (final["sample"] * 3925)
+        final["sample"] = (final["sample"].clamp(0, 1))
+        final["sample"] = (final["sample"])
 
         #if resize:
         #    final["sample"] = f.resize(final["sample"], resize, antialias=True)

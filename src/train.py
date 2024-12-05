@@ -125,7 +125,7 @@ def train(args, model=None, finetune=False):
 
             logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
 
-            break
+
 
         if args.sample_freq and epoch % args.sample_freq == 0:# and epoch > 0:
             settings = torch.Tensor(args.sample_settings).to(device).unsqueeze(0)
@@ -172,13 +172,13 @@ def launch():
     import argparse
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
-    args.run_name = "test"
-    args.epochs = 601
+    args.run_name = "test_2"
+    args.epochs = 101
     #args.epochs = 1
     args.noise_steps = 1000
     args.beta_start = 1e-4
     args.beta_end = 0.02
-    args.batch_size = 4
+    args.batch_size = 16
     # length of the input
     args.length = 1024
     args.features = ['Stage3_OutputPower',

@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import pandas as pd
 from modules import UNet_conditional
 from diffusion import *
 from utils import *
@@ -34,7 +35,6 @@ def predict(model,
 
             x_real.extend(vectors.cpu().tolist() * n_samples)
             predictions.extend(pred.cpu().tolist())
-            print(i)
 
     return x_real, predictions
 
@@ -60,6 +60,10 @@ def evaluate(model,
                                   test_dataloader,
                                   device=device,
                                   n_samples=n_samples)
+    data = {'x_real': x_real, 'predictions': predictions}
+    df = pd.DataFrame(data)
+    df.to_csv('results/predictions/preds_test.csv', index=False)
+
     mse = nn.MSELoss()
     mse_errors = []
 
@@ -79,7 +83,7 @@ def main():
     model = UNet_conditional(length=1024,
                              feat_num=3,
                              device=device).to(device)
-    ckpt = torch.load(path, map_location=device)
+    ckpt = torch.load(path, map_location=device, weights_only=True)
     model.load_state_dict(ckpt)
     sampler = SpacedDiffusion(beta_start=1e-4,
                               beta_end=0.02,

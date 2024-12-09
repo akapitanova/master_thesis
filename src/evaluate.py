@@ -11,7 +11,7 @@ def predict(model,
             sampler,
             test_dl,
             device,
-            n_samples=4):
+            n_samples=1):
     """
     Return predictions
     """
@@ -34,7 +34,7 @@ def predict(model,
                                             )
 
             x_real.extend(vectors.cpu().tolist() * n_samples)
-            predictions.extend(pred.cpu().tolist())
+            predictions.append(pred.cpu().tolist())
 
     return x_real, predictions
 
@@ -43,7 +43,7 @@ def evaluate(model,
              sampler,
              device,
              test_csv_path,
-             n_samples=3):
+             n_samples=1):
     """
     Evaluate predictions
     """
@@ -60,46 +60,9 @@ def evaluate(model,
                                   test_dataloader,
                                   device=device,
                                   n_samples=n_samples)
-    data = {'x_real': x_real, 'predictions': predictions}
-    df = pd.DataFrame(data)
-    df.to_csv('results/predictions/preds_test.csv', index=False)
 
-    mse = nn.MSELoss()
-    mse_errors = []
+    # intesities are normalized
+    #x_real = [[x * 3925 for x in row] for row in x_real]
 
-    for i, pred in enumerate(predictions):
-        err = mse(torch.FloatTensor(pred), torch.FloatTensor(x_real[i]))
-        mse_errors.append(err)
+    return x_real, predictions
 
-    return mse_errors
-
-def main():
-    path = "models/test/ema_ckpt.pt"
-    print("Loading ", path)
-
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print('Using device:', device)
-
-    model = UNet_conditional(length=1024,
-                             feat_num=3,
-                             device=device).to(device)
-    ckpt = torch.load(path, map_location=device, weights_only=True)
-    model.load_state_dict(ckpt)
-    sampler = SpacedDiffusion(beta_start=1e-4,
-                              beta_end=0.02,
-                              noise_steps=1000,
-                              section_counts=[40],
-                              length=1024,
-                              device=device,
-                              rescale_timesteps=False)
-    mse_errors = evaluate(model,
-                          sampler,
-                          device,
-                          "../data/test_data.csv")
-
-    print(mse_errors)
-    mean_err = np.mean(mse_errors)
-    print(f"Mean test mse error: {mean_err}")
-
-if __name__ == '__main__':
-    main()

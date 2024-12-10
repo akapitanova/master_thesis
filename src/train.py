@@ -180,7 +180,8 @@ def launch():
     args.beta_end = 0.02
     args.batch_size = 16
     # length of the input
-    args.length = 1024
+    #args.length = 1024
+    args.length = 421
     args.features = ['Stage3_OutputPower',
     'Stage3_Piezo',
     'stepper_diff']

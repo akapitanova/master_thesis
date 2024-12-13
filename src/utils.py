@@ -45,16 +45,6 @@ def create_spectrogram(wavelengths, intensities, label="Spectrogram of Intensiti
     plt.show()
 
 
-def cut_zero_ends(df):
-    wavelengths = np.load('data/wavelengths.npy')
-    mask = np.load('data/wavelengths_mask.npy')
-    
-    filtered_wavelengths = wavelengths[~mask]
-    df['intensities'] = df['intensities'].apply(
-        lambda x: np.array(list(map(float, x.split(','))))[~mask].tolist()
-    )
-    return df
-
 class CustomDataset(Dataset):
     def __init__(self, x_data, y_data):
         self.x_data = x_data  # 1D feature vectors

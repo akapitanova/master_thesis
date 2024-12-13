@@ -107,6 +107,7 @@ def train(args, model=None, finetune=False):
             t = diffusion.sample_timesteps(vectors.shape[0], all_same=False).to(device)
             x_t, noise = diffusion.noise_images(vectors, t)
 
+
             if np.random.random() < 0.1:
                 settings = None
 
@@ -172,8 +173,8 @@ def launch():
     import argparse
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
-    args.run_name = "test_2"
-    args.epochs = 101
+    args.run_name = "cut_ends"
+    args.epochs = 1001
     #args.epochs = 1
     args.noise_steps = 1000
     args.beta_start = 1e-4
@@ -181,7 +182,7 @@ def launch():
     args.batch_size = 16
     # length of the input
     #args.length = 1024
-    args.length = 421
+    args.length = 512
     args.features = ['Stage3_OutputPower',
     'Stage3_Piezo',
     'stepper_diff']

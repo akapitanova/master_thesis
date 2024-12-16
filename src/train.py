@@ -98,7 +98,7 @@ def train(args, model=None, finetune=False):
     # Training loop
     for epoch in range(args.epochs):
         logging.info(f"Starting epoch {epoch}:")
-        pbar = tqdm(train_dataloader, desc=f"Epoch {epoch}/{args.epochs - 1}")
+        pbar = tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{args.epochs}")
 
         for i, data in enumerate(pbar):
             vectors = data['data'].to(device)
@@ -173,16 +173,16 @@ def launch():
     import argparse
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
-    args.run_name = "cut_ends"
-    args.epochs = 1001
+    args.run_name = "e1000_bs16"
+    args.epochs = 1000
     #args.epochs = 1
     args.noise_steps = 1000
     args.beta_start = 1e-4
     args.beta_end = 0.02
     args.batch_size = 16
     # length of the input
-    #args.length = 1024
-    args.length = 512
+    args.length = 1024
+    #args.length = 512
     args.features = ['Stage3_OutputPower',
     'Stage3_Piezo',
     'stepper_diff']
@@ -191,7 +191,7 @@ def launch():
     args.lr = 1e-3
     args.grad_acc = 1
     args.sample_freq = 0
-    data_path = "../data/train_data.csv"
+    data_path = "../data/train_data_1024.csv"
     args.x_train, args.y_train = get_data(data_path)
     #args.sample_settings = [32.,15.,15.]
     # cond vector pro zkusebni datapoint behem prubezneho ukladani v trenovani

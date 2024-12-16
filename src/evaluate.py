@@ -16,6 +16,7 @@ def predict(model,
     Return predictions
     """
     x_real = []
+    cond_vectors = []
     predictions = []
 
     model.eval()
@@ -34,9 +35,10 @@ def predict(model,
                                             )
 
             x_real.extend(vectors.cpu().tolist() * n_samples)
+            cond_vectors.extend(settings.cpu().tolist() * n_samples)
             predictions.append(pred.cpu().tolist())
 
-    return x_real, predictions
+    return x_real, cond_vectors, predictions
 
 
 def evaluate(model,
@@ -55,7 +57,7 @@ def evaluate(model,
                                  batch_size=1,
                                  shuffle=False)
 
-    x_real, predictions = predict(model,
+    x_real, cond_vectors, predictions = predict(model,
                                   sampler,
                                   test_dataloader,
                                   device=device,
@@ -64,5 +66,5 @@ def evaluate(model,
     # intesities are normalized
     #x_real = [[x * 3925 for x in row] for row in x_real]
 
-    return x_real, predictions
+    return x_real, cond_vectors, predictions
 

@@ -13,7 +13,7 @@ def predict(model,
             device,
             n_samples=1):
     """
-    Return predictions
+    Return predictions using the specified sampler.
     """
     x_real = []
     cond_vectors = []
@@ -24,15 +24,22 @@ def predict(model,
     with torch.no_grad():
         for i, data in enumerate(tqdm(test_dl, desc="Testing loop")):
             vectors = data['data'].to(device)
+            length = vectors.size(1)
             settings = data['settings'].to(device)
 
-            pred = sampler.ddim_sample_loop(model=model,
-                                            y=settings,
-                                            cfg_scale=1,
-                                            device=device,
-                                            eta=1,
-                                            n=n_samples
-                                            )
+            #pred = sampler.ddim_sample_loop(model=model,
+            #                                y=settings,
+            #                                cfg_scale=1,
+            #                                device=device,
+            #                                eta=1,
+            #                                n=n_samples
+            #                                )
+            pred = sampler.sample(
+                length=length,
+                device=device,
+                class_labels=settings,
+                n_samples=n_samples
+            )
 
             x_real.extend(vectors.cpu().tolist() * n_samples)
             cond_vectors.extend(settings.cpu().tolist() * n_samples)

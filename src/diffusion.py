@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from tqdm import tqdm
 import logging
@@ -356,6 +357,7 @@ class GaussianDiffusion:
 
 class SpacedDiffusion(GaussianDiffusion):
     """
+    DDIM
     A diffusion process which can skip steps in a base diffusion process.
 
     :param use_timesteps: a collection (sequence or set) of timesteps from the
@@ -526,3 +528,102 @@ def space_timesteps(num_timesteps, section_counts):
         all_steps += taken_steps
         start_idx += size
     return set(all_steps)
+
+
+    #model, timestep_map, rescale_timesteps, original_num_steps
+
+class EdmSampler:
+    """
+    Proposed EDM sampler (Algorithm 2).
+    """
+    def __init__(
+            self,
+            net,
+            num_steps=18,
+            sigma_min=0.002,
+            sigma_max=80,
+            rho=7,
+            S_churn=0,
+            S_min=0,
+            S_max=float('inf'),
+            S_noise=1,
+            randn_like=torch.randn_like
+    ):
+        """
+        Initializes the EDM Sampler.
+
+        Attributes:
+        - net: Neural network used for denoising and sigma adjustment.
+        - num_steps: Number of discretization steps for the diffusion process.
+        - sigma_min: Minimum noise level for the diffusion process.
+        - sigma_max: Maximum noise level for the diffusion process.
+        - rho: Controls the distribution of timesteps (exponential factor).
+        - S_churn: Factor for temporary noise level increase.
+        - S_min: Minimum noise level for applying S_churn.
+        - S_max: Maximum noise level for applying S_churn.
+        - S_noise: Noise magnitude for temporary increase in the process.
+        - randn_like: Function for generating random noise.
+        """
+        self.net = net
+        self.num_steps = num_steps
+        self.sigma_min = sigma_min
+        self.sigma_max = sigma_max
+        self.rho = rho
+        self.S_churn = S_churn
+        self.S_min = S_min
+        self.S_max = S_max
+        self.S_noise = S_noise
+        self.randn_like = randn_like
+
+    def sample(self, length, device, class_labels=None, n_samples=1):
+        """
+        Runs the diffusion sampling process.
+
+        Args:
+        - length: Length of the latent vectors.
+        - device: Device to run the sampling on.
+        - class_labels: Optional class labels for conditional generation.
+        - n_samples: Number of samples to generate in parallel.
+
+        Returns:
+        - Final sampled tensor after the diffusion process.
+        """
+        # Create initial latents.
+        latents = self.randn_like(torch.empty((n_samples, length), device=device))
+
+        # Adjust noise levels based on what's supported by the network.
+        sigma_min = max(self.sigma_min, self.net.sigma_min)
+        sigma_max = min(self.sigma_max, self.net.sigma_max)
+
+        # Time step discretization.
+        step_indices = torch.arange(self.num_steps, dtype=torch.float64, device=device)
+        t_steps = (
+            sigma_max ** (1 / self.rho)
+            + step_indices / (self.num_steps - 1) * (sigma_min ** (1 / self.rho)
+                                                     - sigma_max ** (1 / self.rho))
+        ) ** self.rho
+        # t_N = 0
+        t_steps = torch.cat([self.net.round_sigma(t_steps), torch.zeros_like(t_steps[:1])])
+
+        # Main sampling loop.
+        x_next = latents.to(torch.float64) * t_steps[0]
+        for i, (t_cur, t_next) in enumerate(zip(t_steps[:-1], t_steps[1:])):  # 0, ..., N-1
+            x_cur = x_next
+
+            # Increase noise temporarily.
+            gamma = min(self.S_churn / self.num_steps, np.sqrt(2) - 1) if self.S_min <= t_cur <= self.S_max else 0
+            t_hat = self.net.round_sigma(t_cur + gamma * t_cur)
+            x_hat = x_cur + (t_hat ** 2 - t_cur ** 2).sqrt() * self.S_noise * self.randn_like(x_cur)
+
+            # Euler step.
+            denoised = self.net(x_hat, t_hat, class_labels).to(torch.float64)
+            d_cur = (x_hat - denoised) / t_hat
+            x_next = x_hat + (t_next - t_hat) * d_cur
+
+            # Apply 2nd order correction.
+            if i < self.num_steps - 1:
+                denoised = self.net(x_next, t_next, class_labels).to(torch.float64)
+                d_prime = (x_next - denoised) / t_next
+                x_next = x_hat + (t_next - t_hat) * (0.5 * d_cur + 0.5 * d_prime)
+
+        return x_next

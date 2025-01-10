@@ -575,6 +575,9 @@ class EdmSampler:
         self.S_noise = S_noise
         self.randn_like = randn_like
 
+    def round_sigma(self, sigma):
+        return torch.as_tensor(sigma)
+
     def sample(self, length, device, class_labels=None, n_samples=1):
         """
         Runs the diffusion sampling process.
@@ -591,9 +594,10 @@ class EdmSampler:
         # Create initial latents.
         latents = self.randn_like(torch.empty((n_samples, length), device=device))
 
-        # Adjust noise levels based on what's supported by the network.
-        sigma_min = max(self.sigma_min, self.net.sigma_min)
-        sigma_max = min(self.sigma_max, self.net.sigma_max)
+        #sigma_min = max(self.sigma_min, self.net.sigma_min)
+        #sigma_max = min(self.sigma_max, self.net.sigma_max)
+        sigma_min = self.sigma_min
+        sigma_max = self.sigma_max
 
         # Time step discretization.
         step_indices = torch.arange(self.num_steps, dtype=torch.float64, device=device)
@@ -603,26 +607,30 @@ class EdmSampler:
                                                      - sigma_max ** (1 / self.rho))
         ) ** self.rho
         # t_N = 0
-        t_steps = torch.cat([self.net.round_sigma(t_steps), torch.zeros_like(t_steps[:1])])
+        t_steps = torch.cat([self.round_sigma(t_steps), torch.zeros_like(t_steps[:1])])
 
         # Main sampling loop.
+        self.net.eval()
+
         x_next = latents.to(torch.float64) * t_steps[0]
         for i, (t_cur, t_next) in enumerate(zip(t_steps[:-1], t_steps[1:])):  # 0, ..., N-1
             x_cur = x_next
 
             # Increase noise temporarily.
             gamma = min(self.S_churn / self.num_steps, np.sqrt(2) - 1) if self.S_min <= t_cur <= self.S_max else 0
-            t_hat = self.net.round_sigma(t_cur + gamma * t_cur)
+            t_hat = self.round_sigma(t_cur + gamma * t_cur)
             x_hat = x_cur + (t_hat ** 2 - t_cur ** 2).sqrt() * self.S_noise * self.randn_like(x_cur)
 
             # Euler step.
-            denoised = self.net(x_hat, t_hat, class_labels).to(torch.float64)
+            with torch.no_grad():
+                denoised = self.net(x_hat, t_hat, class_labels).to(torch.float64)
             d_cur = (x_hat - denoised) / t_hat
             x_next = x_hat + (t_next - t_hat) * d_cur
 
             # Apply 2nd order correction.
             if i < self.num_steps - 1:
-                denoised = self.net(x_next, t_next, class_labels).to(torch.float64)
+                with torch.no_grad():
+                    denoised = self.net(x_next, t_next, class_labels).to(torch.float64)
                 d_prime = (x_next - denoised) / t_next
                 x_next = x_hat + (t_next - t_hat) * (0.5 * d_cur + 0.5 * d_prime)
 

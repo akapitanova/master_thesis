@@ -600,7 +600,7 @@ class EdmSampler:
         sigma_max = self.sigma_max
 
         # Time step discretization.
-        step_indices = torch.arange(self.num_steps, dtype=torch.float64, device=device)
+        step_indices = torch.arange(self.num_steps, dtype=torch.float32, device=device)
         t_steps = (
             sigma_max ** (1 / self.rho)
             + step_indices / (self.num_steps - 1) * (sigma_min ** (1 / self.rho)
@@ -612,7 +612,7 @@ class EdmSampler:
         # Main sampling loop.
         self.net.eval()
 
-        x_next = latents.to(torch.float64) * t_steps[0]
+        x_next = latents.to(torch.float32) * t_steps[0]
         for i, (t_cur, t_next) in enumerate(zip(t_steps[:-1], t_steps[1:])):  # 0, ..., N-1
             x_cur = x_next
 
@@ -623,14 +623,14 @@ class EdmSampler:
 
             # Euler step.
             with torch.no_grad():
-                denoised = self.net(x_hat, t_hat, class_labels).to(torch.float64)
+                denoised = self.net(x_hat, t_hat, class_labels).to(torch.float32)
             d_cur = (x_hat - denoised) / t_hat
             x_next = x_hat + (t_next - t_hat) * d_cur
 
             # Apply 2nd order correction.
             if i < self.num_steps - 1:
                 with torch.no_grad():
-                    denoised = self.net(x_next, t_next, class_labels).to(torch.float64)
+                    denoised = self.net(x_next, t_next, class_labels).to(torch.float32)
                 d_prime = (x_next - denoised) / t_next
                 x_next = x_hat + (t_next - t_hat) * (0.5 * d_cur + 0.5 * d_prime)
 

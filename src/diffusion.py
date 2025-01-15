@@ -578,6 +578,26 @@ class EdmSampler:
     def round_sigma(self, sigma):
         return torch.as_tensor(sigma)
 
+    def transform_vector(self, vector):
+        """
+        Transforms the vector by multiplying it by -1 and normalizing its values between 0 and 1.
+    
+        Args:
+        - vector: Input tensor to be transformed.
+    
+        Returns:
+        - Transformed tensor.
+        """
+        # Multiply by -1
+        vector = -vector
+    
+        # Normalize values to [0, 1]
+        min_val = torch.min(vector, dim=-1, keepdim=True).values
+        max_val = torch.max(vector, dim=-1, keepdim=True).values
+        normalized_vector = (vector - min_val) / (max_val - min_val)
+    
+        return normalized_vector
+
     def sample(self, length, device, class_labels=None, n_samples=1):
         """
         Runs the diffusion sampling process.
@@ -633,5 +653,7 @@ class EdmSampler:
                     denoised = self.net(x_next, t_next, class_labels).to(torch.float32)
                 d_prime = (x_next - denoised) / t_next
                 x_next = x_hat + (t_next - t_hat) * (0.5 * d_cur + 0.5 * d_prime)
+
+        x_next = self.transform_vector(x_next)
 
         return x_next

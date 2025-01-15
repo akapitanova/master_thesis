@@ -6,7 +6,31 @@ from matplotlib.colors import LogNorm
 from torch.utils.data import DataLoader, Dataset
 import seaborn as sns
 from scipy.stats import ttest_ind
+import os
+import csv
 
+# Save each vector as a separate CSV file
+def save_samples(vectors, folder="samples", start_index=0):
+    os.makedirs(folder, exist_ok=True)
+    indexes = range(start_index, start_index + len(vectors))
+    for i, vector in zip(indexes, vectors):
+        file_path = os.path.join(folder, f"{i}.csv")
+        with open(file_path, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(vector)
+
+# Save multiple vectors as a single plot
+def save_images(vectors, cond_vectors, wavelengths, path):
+    plt.figure(figsize=(12, 6))
+    for i, (vector, cond_vector) in enumerate(zip(vectors, cond_vectors)):
+        cond_str = ', '.join([f"{val:.2f}" for val in cond_vector])
+        plt.plot(wavelengths, vector, label=f"Vector {i+1} | Cond: [{cond_str}]")
+    plt.xlabel("Wavelengths")
+    plt.ylabel("Intensity")
+    plt.title("Plot of Selected Vectors")
+    plt.legend()
+    plt.savefig(path)
+    plt.close()
 
 def create_spectrogram(wavelengths,
                        intensities,

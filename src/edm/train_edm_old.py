@@ -6,12 +6,10 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from .modules_edm_old import EDMPrecond
-#from modules_edm import EDMPrecond
 from src.diffusion import *
 from src.utils import *
 from src.ddim.modules_ddim import EMA
 from .loss import EDMLoss
-#from loss import EDMLoss
 
 def setup_logging(run_name):
     os.makedirs("src/models", exist_ok=True)
@@ -42,7 +40,7 @@ def train(args, model=None, finetune=False):
                             sigma_min       = 0,
                             sigma_max       = float('inf'),
                             sigma_data      = 0.5,
-                            model_type      = 'UNet_conditional',
+                            model_type      = 'DhariwalUNet',
                             ).to(device)
         optimizer = optim.AdamW(model.parameters(), lr=args.lr)
 
@@ -79,7 +77,7 @@ def train(args, model=None, finetune=False):
 
             # Accumulate gradients
             optimizer.zero_grad()
-            loss.mean().backward()
+            loss.sum().backward()
 
             # Update weights
             optimizer.step()
@@ -88,8 +86,8 @@ def train(args, model=None, finetune=False):
             # TODO
             ema.step_ema(ema_model, model)
 
-            pbar.set_postfix({"_Loss": "{:.4f}".format(loss.mean())})
-            logger.add_scalar("Loss", loss.mean(), global_step=epoch * l + i)
+            pbar.set_postfix({"_Loss": "{:.4f}".format(loss.sum())})
+            logger.add_scalar("Loss", loss.sum(), global_step=epoch * l + i)
 
         # Save samples periodically
         if args.sample_freq and epoch % args.sample_freq == 0:# and epoch > 0:
@@ -134,26 +132,37 @@ def launch():
     import argparse
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
-    args.run_name = "edm_e50_bs16"
-    args.epochs = 50
+    args.run_name = "edm_e1000_bs16"
+    args.epochs = 1000
     args.n_samples = 1
     #args.epochs = 1
+    args.noise_steps = 1000
+    args.beta_start = 1e-4
+    args.beta_end = 0.02
     args.batch_size = 16
     # length of the input
     args.length = 1024
     #args.length = 512
-    args.device = "cuda:3"
+    args.features = ['Stage3_OutputPower',
+    'Stage3_Piezo',
+    'stepper_diff']
+    args.device = "cuda:0"
     #args.device = "cpu"
     args.lr = 1e-3
     args.grad_acc = 1
     args.sample_freq = 0
-    data_path = "data/train_data_1024_[-1,1].csv"
+    data_path = "data/train_data_1024.csv"
     args.x_train, args.y_train = get_data(data_path)
 
     # cond vector pro zkusebni datapoint behem prubezneho ukladani v trenovani
     args.sample_settings = [1.0, 0.604, 0.0]
     args.sample_size = 8
 
+    #model = UNet_conditional(length=1024,
+    #                         feat_num=3,
+    #                         device=args.device).to(args.device)
+    #ckpt = torch.load("models/transfered.pt", map_location=args.device)
+    #model.load_state_dict(ckpt)
     train(args, model=None)
 
 if __name__ == '__main__':

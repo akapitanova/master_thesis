@@ -27,7 +27,7 @@ class EDMLoss:
         images =images.unsqueeze(1)
         y, augment_labels = augment_pipe(images) if augment_pipe is not None else (images, None)
         n = torch.randn_like(y) * sigma
-        D_yn = net(y + n, sigma, labels, augment_labels=augment_labels)
+        D_yn = net(y + n, sigma, labels)
         loss = weight * ((D_yn - y) ** 2)
         return loss
 

@@ -5,7 +5,7 @@ from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
-from .modules_edm_old import EDMPrecond
+from .modules_edm import EDMPrecond
 #from modules_edm import EDMPrecond
 from src.diffusion import *
 from src.utils import *
@@ -43,6 +43,7 @@ def train(args, model=None, finetune=False):
                             sigma_max       = float('inf'),
                             sigma_data      = 0.5,
                             model_type      = 'UNet_conditional',
+                            device          = device
                             ).to(device)
         optimizer = optim.AdamW(model.parameters(), lr=args.lr)
 

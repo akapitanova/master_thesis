@@ -246,6 +246,7 @@ class EDMPrecond(torch.nn.Module):
         sigma_max       = float('inf'),     # Maximum supported noise level.
         sigma_data      = 0.5,              # Expected standard deviation of the training data.
         model_type      = 'UNet_conditional',   # Class name of the underlying model.
+        device          = 'cuda' 
     ):
         super().__init__()
         self.img_resolution = img_resolution
@@ -259,7 +260,7 @@ class EDMPrecond(torch.nn.Module):
                                             c_out = img_channels,
                                             time_dim = 256,
                                             #device = "cuda",
-                                           device="cpu",
+                                            device=device,
                                             feat_num = label_dim,
                                             length = img_resolution)
 

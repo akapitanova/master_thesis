@@ -5,17 +5,17 @@ from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
-from modules_edm import EDMPrecond
+from .modules_edm import EDMPrecond
 from src.diffusion import *
 from src.utils import *
 from src.ddim.modules_ddim import EMA
-from loss import EDMLoss
+from .loss import EDMLoss
 
 def setup_logging(run_name):
-    os.makedirs("../models", exist_ok=True)
-    os.makedirs("../results", exist_ok=True)
-    os.makedirs(os.path.join("../models", run_name), exist_ok=True)
-    os.makedirs(os.path.join("../results", run_name), exist_ok=True)
+    os.makedirs("src/models", exist_ok=True)
+    os.makedirs("src/results", exist_ok=True)
+    os.makedirs(os.path.join("src/models", run_name), exist_ok=True)
+    os.makedirs(os.path.join("src/results", run_name), exist_ok=True)
 
 def train(args, model=None, finetune=False):
     setup_logging(args.run_name)
@@ -54,7 +54,7 @@ def train(args, model=None, finetune=False):
     scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs * steps_per_epoch)
     loss_fn = EDMLoss()
 
-    logger = SummaryWriter(os.path.join("../runs", args.run_name))
+    logger = SummaryWriter(os.path.join("src/runs", args.run_name))
 
     ema = EMA(0.995)
     ema_model = copy.deepcopy(model).eval().requires_grad_(False).to(device)
@@ -64,7 +64,7 @@ def train(args, model=None, finetune=False):
     for epoch in range(args.epochs):
         logging.info(f"Starting epoch {epoch}:")
         pbar = tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{args.epochs}")
-        wavelengths = np.load('../../data/wavelengths.npy')
+        wavelengths = np.load('data/wavelengths.npy')
 
         for i, data in enumerate(pbar):
             vectors = data['data'].to(device)
@@ -103,10 +103,10 @@ def train(args, model=None, finetune=False):
                                                           args.run_name,
                                                           wavelengths,
                                                           f"{epoch}_ema.jpg"))
-            torch.save(ema_model.state_dict(), os.path.join("../models",
+            torch.save(ema_model.state_dict(), os.path.join("src/models",
                                                             args.run_name,
                                                             f"ema_ckpt.pt"))
-            torch.save(optimizer.state_dict(), os.path.join("../models",
+            torch.save(optimizer.state_dict(), os.path.join("src/models",
                                                             args.run_name,
                                                             f"optim.pt"))
     # Save final samples and checkpoints
@@ -121,10 +121,10 @@ def train(args, model=None, finetune=False):
                                         )
             #save_samples(ema_sampled_vectors, os.path.join("../results",
              #                                              args.run_name))
-    torch.save(ema_model.state_dict(), os.path.join("../models",
+    torch.save(ema_model.state_dict(), os.path.join("src/models",
                                                     args.run_name,
                                                     f"ema_ckpt.pt"))
-    torch.save(optimizer.state_dict(), os.path.join("../models",
+    torch.save(optimizer.state_dict(), os.path.join("src/models",
                                                     args.run_name,
                                                     f"optim.pt"))
 
@@ -132,26 +132,26 @@ def launch():
     import argparse
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
-    args.run_name = "e1000_bs16"
-    args.epochs = 3
+    args.run_name = "edm_e1000_bs16"
+    args.epochs = 1000
     args.n_samples = 1
     #args.epochs = 1
     args.noise_steps = 1000
     args.beta_start = 1e-4
     args.beta_end = 0.02
-    args.batch_size = 2
+    args.batch_size = 16
     # length of the input
     args.length = 1024
     #args.length = 512
     args.features = ['Stage3_OutputPower',
     'Stage3_Piezo',
     'stepper_diff']
-    #args.device = "cuda:0"
-    args.device = "cpu"
+    args.device = "cuda:0"
+    #args.device = "cpu"
     args.lr = 1e-3
     args.grad_acc = 1
     args.sample_freq = 0
-    data_path = "../../data/test_data_0.csv"
+    data_path = "data/train_data_1024.csv"
     args.x_train, args.y_train = get_data(data_path)
 
     # cond vector pro zkusebni datapoint behem prubezneho ukladani v trenovani

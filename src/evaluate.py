@@ -1,12 +1,14 @@
 from diffusion import *
-from src.utils import *
+from utils import *
+from dataset import *
 
 
 def predict(model,
             sampler,
             test_dl,
             device,
-            n_samples=1):
+            n_samples=1,
+            s_type='edm'):
     """
     Return predictions using the specified sampler.
     """
@@ -22,19 +24,21 @@ def predict(model,
             length = vectors.size(1)
             settings = data['settings'].to(device)
 
-            #pred = sampler.ddim_sample_loop(model=model,
-            #                                y=settings,
-            #                                cfg_scale=1,
-            #                                device=device,
-            #                                eta=1,
-            #                                n=n_samples
-            #                                )
-            pred = sampler.sample(
-                length=length,
-                device=device,
-                class_labels=settings,
-                n_samples=n_samples
-            )
+            if s_type == 'ddim':
+                pred = sampler.ddim_sample_loop(model=model,
+                                                y=settings,
+                                                cfg_scale=1,
+                                                device=device,
+                                                eta=1,
+                                                n=n_samples
+                                                )
+            elif s_type == 'edm':
+                pred = sampler.sample(
+                    length=length,
+                    device=device,
+                    class_labels=settings,
+                    n_samples=n_samples
+                )
 
             x_real.extend(vectors.cpu().tolist() * n_samples)
             cond_vectors.extend(settings.cpu().tolist() * n_samples)
@@ -47,7 +51,8 @@ def evaluate(model,
              sampler,
              device,
              test_csv_path,
-             n_samples=1):
+             n_samples=1,
+             s_type='edm'):
     """
     Evaluate predictions
     """
@@ -63,7 +68,9 @@ def evaluate(model,
                                   sampler,
                                   test_dataloader,
                                   device=device,
-                                  n_samples=n_samples)
+                                  n_samples=n_samples,
+                                  s_type=s_type
+                                                )
 
     # intesities are normalized
     #x_real = [[x * 3925 for x in row] for row in x_real]

@@ -5,10 +5,6 @@ import logging
 from torchsummary import summary
 import torchvision.transforms.functional as f
 
-
-# from src.dataset import remove_gain
-
-
 def prepare_noise_schedule(noise_steps, beta_start, beta_end):
     """
     cosine schedule
@@ -189,11 +185,8 @@ class GaussianDiffusion:
             final = sample
 
 
-        # normalization to back numbers, for intensities: lower_bound=0, upper_bound=3925
-        #final["sample"] = (final["sample"].clamp(-1, 1) + 1) / 2
-        #final["sample"] = (final["sample"] * 255).type(torch.uint8)
-        #final["sample"] = (final["sample"] * 3925)
-        final["sample"] = (final["sample"].clamp(0, 1))
+        #final["sample"] = (final["sample"].clamp(0, 1))
+        final["sample"] = (final["sample"].clamp(-1, 1))
         final["sample"] = (final["sample"])
 
         #if resize:
@@ -286,6 +279,7 @@ class GaussianDiffusion:
                     - 'log_variance': the log of 'variance'.
                     - 'pred_xstart': the prediction for x_0.
         """
+
         model_output = model.forward(x, t, y)
         if cfg_scale > 0:
             uncond_model_output = model(x, t, None)
@@ -588,13 +582,15 @@ class EdmSampler:
         Returns:
         - Transformed tensor.
         """
-        # Multiply by -1
-        vector = -vector
     
         # Normalize values to [0, 1]
         min_val = torch.min(vector, dim=-1, keepdim=True).values
         max_val = torch.max(vector, dim=-1, keepdim=True).values
-        normalized_vector = (vector - min_val) / (max_val - min_val)
+
+        norm_min = -1
+        norm_max = 1
+
+        normalized_vector = norm_min + (vector - min_val) * (norm_max - norm_min) / (max_val - min_val)
     
         return normalized_vector
 

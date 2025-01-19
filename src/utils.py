@@ -1,33 +1,27 @@
 import pandas as pd
-import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
-from torch.utils.data import DataLoader, Dataset
 import seaborn as sns
 from scipy.stats import ttest_ind
 import os
 import csv
 
-# Save each vector as a separate CSV file
-def save_samples(vectors, folder="samples", start_index=0):
-    os.makedirs(folder, exist_ok=True)
-    indexes = range(start_index, start_index + len(vectors))
-    for i, vector in zip(indexes, vectors):
-        file_path = os.path.join(folder, f"{i}.csv")
-        with open(file_path, 'w', newline='') as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(vector)
-
 # Save multiple vectors as a single plot
-def save_images(vectors, cond_vectors, wavelengths, path):
+def save_images(vectors,
+                true_vector,
+                cond_vector,
+                wavelengths,
+                path,
+                epoch):
     plt.figure(figsize=(12, 6))
-    for i, (vector, cond_vector) in enumerate(zip(vectors, cond_vectors)):
-        cond_str = ', '.join([f"{val:.2f}" for val in cond_vector])
-        plt.plot(wavelengths, vector, label=f"Vector {i+1} | Cond: [{cond_str}]")
+    cond_str = ', '.join([f"{val:.2f}" for val in cond_vector])
+    for i, vector in enumerate(vectors):
+        plt.plot(wavelengths, vector, label=f"Predicted sample {i+1}")
+    plt.plot(wavelengths, true_vector, label=f"True spectrum")
     plt.xlabel("Wavelengths")
     plt.ylabel("Intensity")
-    plt.title("Plot of Selected Vectors")
+    plt.title(f"Epoch: {epoch} | Cond: [{cond_str}]")
     plt.legend()
     plt.savefig(path)
     plt.close()
@@ -490,27 +484,3 @@ def plot_predictions_with_cond_vectors(predictions, cond_vectors, num_rows=20):
     plt.tight_layout()
     plt.show()
 
-class CustomDataset(Dataset):
-    def __init__(self, x_data, y_data):
-        self.x_data = x_data  # 1D feature vectors
-        self.y_data = y_data  # Target labels
-
-    def __len__(self):
-        return len(self.x_data)
-
-    def __getitem__(self, idx):
-        #x_tensor = torch.tensor(self.x_data[idx], dtype=torch.float32).reshape(1,-1)# convert x_data to tensor, reshape to add dimension
-        x_tensor = torch.tensor(self.x_data[idx], dtype=torch.float32)
-        y_tensor = torch.tensor(self.y_data[idx], dtype=torch.float32)  # convert y_data to tensor
-        return {'data': x_tensor, 'settings': y_tensor}
-        #return {'data': self.x_data[idx], 'settings': self.y_data[idx]}
-
-def get_data(data_path):
-    df = pd.read_csv(data_path)
-    df['intensities'] = df['intensities'].apply(eval)
-    df['cond_vector'] = df['cond_vector'].apply(eval)
-
-    x_data = df['intensities'].tolist()
-    y_data = df['cond_vector'].tolist()
-
-    return x_data, y_data

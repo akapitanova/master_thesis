@@ -108,10 +108,10 @@ def train(args, model=None, finetune=False):
                                                       #resize=args.real_size
                                                        )
 
-            save_images(ema_sampled_vectors,
-                        args.sample_spectrum_real,
-                        args.sample_settings,
-                        wavelengths,
+            save_images(torch.Tensor(ema_sampled_vectors).to('cpu'),
+                        torch.Tensor(args.sample_spectrum_real).to('cpu'),
+                        torch.Tensor(args.sample_settings).to('cpu'),
+                        torch.Tensor(wavelengths).to('cpu'),
                         os.path.join("results",
                                      args.run_name,
                                      f"{epoch}_ema.jpg"),
@@ -140,10 +140,10 @@ def train(args, model=None, finetune=False):
                                                    # resize=args.real_size
                                                    )
 
-    save_images(ema_sampled_vectors,
-                args.sample_spectrum_real,
-                args.sample_settings,
-                wavelengths,
+    save_images(torch.Tensor(ema_sampled_vectors).to('cpu'),
+                        torch.Tensor(args.sample_spectrum_real).to('cpu'),
+                        torch.Tensor(args.sample_settings).to('cpu'),
+                        torch.Tensor(wavelengths).to('cpu'),
                 os.path.join("results",
                              args.run_name,
                              f"{epoch}_final_ema.jpg"),
@@ -153,26 +153,26 @@ def launch():
     import argparse
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
-    args.run_name = "test_ddim"
-    #args.epochs = 1000
-    args.epochs = 1
+    args.run_name = "ddim_e300_bs16"
+    args.epochs = 300
+    #args.epochs = 1
     args.noise_steps = 1000
     args.beta_start = 1e-4
     args.beta_end = 0.02
-    args.batch_size = 4
+    args.batch_size = 16
     # length of the input
     args.length = 1024
     #args.length = 512
     args.features = ['Stage3_OutputPower',
     'Stage3_Piezo',
     'stepper_diff']
-    #args.device = "cuda:0"
-    args.device = "cpu"
+    args.device = "cuda:1"
+    #args.device = "cpu"
     args.lr = 1e-3
     args.grad_acc = 1
-    args.sample_freq = 2
+    args.sample_freq = 10
     args.n_samples = 2
-    data_path = "../data/test_data_1024_[-1,1]_0.csv"
+    data_path = "../data/train_data_1024_[-1,1].csv"
     args.x_train, args.y_train = get_data(data_path)
 
     # cond vector pro zkusebni datapoint behem prubezneho ukladani v trenovani

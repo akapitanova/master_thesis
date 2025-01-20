@@ -186,7 +186,9 @@ class GaussianDiffusion:
 
 
         #final["sample"] = (final["sample"].clamp(0, 1))
-        final["sample"] = (final["sample"].clamp(-1, 1))
+        #final["sample"] = (final["sample"].clamp(-1, 1))
+
+        final["sample"] = transform_vector(final["sample"])
         final["sample"] = (final["sample"])
 
         #if resize:
@@ -526,6 +528,28 @@ def space_timesteps(num_timesteps, section_counts):
 
     #model, timestep_map, rescale_timesteps, original_num_steps
 
+def transform_vector(vector):
+        """
+        Transforms the vector by multiplying it by -1 and normalizing its values between 0 and 1.
+    
+        Args:
+        - vector: Input tensor to be transformed.
+    
+        Returns:
+        - Transformed tensor.
+        """
+    
+        # Normalize values
+        min_val = torch.min(vector, dim=-1, keepdim=True).values
+        max_val = torch.max(vector, dim=-1, keepdim=True).values
+
+        norm_min = -1
+        norm_max = 1
+
+        normalized_vector = norm_min + (vector - min_val) * (norm_max - norm_min) / (max_val - min_val)
+    
+        return normalized_vector
+
 class EdmSampler:
     """
     Proposed EDM sampler (Algorithm 2).
@@ -571,28 +595,6 @@ class EdmSampler:
 
     def round_sigma(self, sigma):
         return torch.as_tensor(sigma)
-
-    def transform_vector(self, vector):
-        """
-        Transforms the vector by multiplying it by -1 and normalizing its values between 0 and 1.
-    
-        Args:
-        - vector: Input tensor to be transformed.
-    
-        Returns:
-        - Transformed tensor.
-        """
-    
-        # Normalize values to [0, 1]
-        min_val = torch.min(vector, dim=-1, keepdim=True).values
-        max_val = torch.max(vector, dim=-1, keepdim=True).values
-
-        norm_min = -1
-        norm_max = 1
-
-        normalized_vector = norm_min + (vector - min_val) * (norm_max - norm_min) / (max_val - min_val)
-    
-        return normalized_vector
 
     def sample(self, length, device, class_labels=None, n_samples=1):
         """
@@ -650,6 +652,6 @@ class EdmSampler:
                 d_prime = (x_next - denoised) / t_next
                 x_next = x_hat + (t_next - t_hat) * (0.5 * d_cur + 0.5 * d_prime)
 
-        x_next = self.transform_vector(x_next)
+        x_next = transform_vector(x_next)
 
         return x_next

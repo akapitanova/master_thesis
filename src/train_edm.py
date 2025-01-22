@@ -143,10 +143,10 @@ def launch():
     import argparse
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
-    args.run_name = "edm_e500_bs16"
-    args.epochs = 500
+    args.run_name = "edm_mse_loss_e300_bs16"
+    args.epochs = 300
+    #args.epochs = 3
     args.n_samples = 1
-    #args.epochs = 1
     args.batch_size = 16
     # length of the input
     args.length = 1024
@@ -156,6 +156,8 @@ def launch():
     args.lr = 1e-3
     args.grad_acc = 1
     args.sample_freq = 10
+    #args.sample_freq = 2
+    #data_path = "../data/test_data_1024_[-1,1]_0.csv"
     data_path = "../data/train_data_1024_[-1,1].csv"
     args.x_train, args.y_train = get_data(data_path)
 

@@ -9,6 +9,7 @@
 "Elucidating the Design Space of Diffusion-Based Generative Models"."""
 
 import torch
+import torch.nn as nn
 
 #----------------------------------------------------------------------------
 # Improved loss function proposed in the paper "Elucidating the Design Space
@@ -28,7 +29,10 @@ class EDMLoss:
         y, augment_labels = augment_pipe(images) if augment_pipe is not None else (images, None)
         n = torch.randn_like(y) * sigma
         D_yn = net(y + n, sigma, labels)
-        loss = weight * ((D_yn - y) ** 2)
+
+        mse = nn.MSELoss()
+        #loss = weight * ((D_yn - y) ** 2)
+        loss = mse(y, D_yn)
         return loss
 
 #----------------------------------------------------------------------------

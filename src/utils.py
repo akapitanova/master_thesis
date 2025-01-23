@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import seaborn as sns
 from scipy.stats import ttest_ind
+from dtaidistance import dtw
+from tabulate import tabulate
 import os
 import csv
 
@@ -484,3 +486,166 @@ def plot_predictions_with_cond_vectors(predictions, cond_vectors, num_rows=20):
     plt.tight_layout()
     plt.show()
 
+def calculate_metrics(wavelengths, intensities):
+    """Calculate mean wavelength, FWHM, and FWTM."""
+    intensities_changed = intensities.copy()
+    intensities_changed += abs(min(intensities))
+    mean_wavelength = np.sum(wavelengths * intensities_changed) / np.sum(intensities_changed)
+    std_deviation = np.sqrt(np.sum(intensities_changed * (wavelengths - mean_wavelength) ** 2) / np.sum(intensities_changed))
+    
+    half_max = (max(intensities_changed) + min(intensities_changed)) / 2
+    indices_above_half_max = np.where(intensities_changed >= half_max)[0]
+    fwhm_start = wavelengths[indices_above_half_max[0]]
+    fwhm_end = wavelengths[indices_above_half_max[-1]]
+    fwhm = fwhm_end - fwhm_start
+
+    tenth_max = (max(intensities_changed) + min(intensities_changed)) / 10
+    indices_above_tenth_max = np.where(intensities_changed >= tenth_max)[0]
+    fwtm_start = wavelengths[indices_above_tenth_max[0]]
+    fwtm_end = wavelengths[indices_above_tenth_max[-1]]
+    fwtm = fwtm_end - fwtm_start
+
+    return mean_wavelength, std_deviation, fwhm, fwhm_start, fwhm_end, fwtm, fwtm_start, fwtm_end
+
+def calculate_metrics_errors(wavelengths, x_real, predictions):
+    """Calculate metrics for each pair of vectors and compute MSE and MAE for each metric."""
+    num_samples = x_real.shape[0]
+
+    # Initialize lists to store metrics
+    metrics_real = []
+    metrics_pred = []
+
+    # Calculate metrics for each pair of vectors
+    for i in range(num_samples):
+        metrics_real.append(calculate_metrics(wavelengths, x_real[i]))
+        metrics_pred.append(calculate_metrics(wavelengths, predictions[i]))
+
+    # Convert to numpy arrays for easier manipulation
+    metrics_real = np.array(metrics_real)
+    metrics_pred = np.array(metrics_pred)
+
+    # Calculate MSE and MAE for each metric
+    mse_results = {}
+    mae_results = {}
+    metric_names = ["mean_wavelength", "std_deviation", "fwhm", "fwhm_start", "fwhm_end", "fwtm", "fwtm_start", "fwtm_end"]
+
+    for j, name in enumerate(metric_names):
+        mse = np.mean((metrics_real[:, j] - metrics_pred[:, j]) ** 2)
+        mae = np.mean(np.abs(metrics_real[:, j] - metrics_pred[:, j]))
+        mse_results[name] = mse
+        mae_results[name] = mae
+
+    # Print results in a table
+    table_data = [[metric, f"{mse_results[metric]:.6f}", f"{mae_results[metric]:.6f}"] for metric in metric_names]
+    print(tabulate(table_data, headers=["Metric", "MSE", "MAE"], tablefmt="grid"))
+
+    return mse_results, mae_results
+
+def plot_comparison(index, wavelengths, x_real, predictions, cond_vectors):
+    """
+    Plot the intensity vectors for the given index from x_real and predictions 
+    with their corresponding FWHM, FWTM, and center of gravity in subplots.
+
+    Parameters:
+        index (int): Index of the intensity vector to plot.
+        wavelengths (numpy.ndarray): 1D array of wavelength values.
+        x_real (numpy.ndarray): 2D array where each row is a vector of real intensities.
+        predictions (numpy.ndarray): 2D array where each row is a vector of predicted intensities.
+
+    Returns:
+        None: Displays the plot with subplots.
+    """
+    
+
+    # Extract the real and predicted intensity vectors for the given index
+    real_intensities = x_real[index]
+    predicted_intensities = predictions[index]
+
+    # Calculate metrics for real and predicted intensity vectors
+    real_metrics = calculate_metrics(wavelengths, real_intensities)
+    pred_metrics = calculate_metrics(wavelengths, predicted_intensities)
+
+    # Set up the subplot
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
+
+    # Plot the real intensity vector
+    axes[0].plot(wavelengths, real_intensities, label='Real Intensity')
+    axes[0].axvline(real_metrics[0], color='red', linestyle='--', label=f'Mean Wavelength: {real_metrics[0]:.2f} nm')
+    axes[0].axvline(real_metrics[3], color='green', linestyle=':', label=f'FWHM Start: {real_metrics[3]:.2f} nm')
+    axes[0].axvline(real_metrics[4], color='green', linestyle=':', label=f'FWHM End: {real_metrics[4]:.2f} nm')
+    axes[0].fill_betweenx([min(real_intensities), 
+                           max(real_intensities)], 
+                          real_metrics[3], 
+                          real_metrics[4],
+                          color='green', 
+                          alpha=0.1, 
+                          label=f'FWHM: {real_metrics[2]:.2f} nm')
+    axes[0].axvline(real_metrics[6], color='blue', linestyle=':', label=f'FWTM Start: {real_metrics[6]:.2f} nm')
+    axes[0].axvline(real_metrics[7], color='blue', linestyle=':', label=f'FWTM End: {real_metrics[7]:.2f} nm')
+    axes[0].fill_betweenx([min(real_intensities), 
+                           max(real_intensities)], 
+                          real_metrics[6], 
+                          real_metrics[7], 
+                          color='blue', 
+                          alpha=0.1, 
+                          label=f'FWTM: {real_metrics[5]:.2f} nm')
+    axes[0].set_title('Real Intensity')
+    axes[0].set_xlabel('Wavelength (nm)')
+    axes[0].set_ylabel('Intensity')
+    axes[0].legend()
+    axes[0].grid(True)
+
+    # Plot the predicted intensity vector
+    axes[1].plot(wavelengths, predicted_intensities, label='Predicted Intensity')
+    axes[1].axvline(pred_metrics[0], color='red', linestyle='--', label=f'Mean Wavelength: {pred_metrics[0]:.2f} nm')
+    axes[1].axvline(pred_metrics[3], color='green', linestyle=':', label=f'FWHM Start: {pred_metrics[3]:.2f} nm')
+    axes[1].axvline(pred_metrics[4], color='green', linestyle=':', label=f'FWHM End: {pred_metrics[4]:.2f} nm')
+    axes[1].fill_betweenx([min(predicted_intensities), 
+                           max(predicted_intensities)], 
+                          pred_metrics[3], 
+                          pred_metrics[4], 
+                          color='green', 
+                          alpha=0.1, 
+                          label=f'FWHM: {pred_metrics[2]:.2f} nm')
+    axes[1].axvline(pred_metrics[6], color='blue', linestyle=':', label=f'FWTM Start: {pred_metrics[6]:.2f} nm')
+    axes[1].axvline(pred_metrics[7], color='blue', linestyle=':', label=f'FWTM End: {pred_metrics[7]:.2f} nm')
+    axes[1].fill_betweenx([min(predicted_intensities), 
+                           max(predicted_intensities)], 
+                          pred_metrics[6], 
+                          pred_metrics[7], 
+                          color='blue', 
+                          alpha=0.1, 
+                          label=f'FWTM: {pred_metrics[5]:.2f} nm')
+    axes[1].set_title('Predicted Intensity')
+    axes[1].set_xlabel('Wavelength (nm)')
+    axes[1].legend()
+    axes[1].grid(True)
+
+    fig.suptitle(f'Index: {index}, Conditional vector: {cond_vectors[index]}')
+
+    plt.tight_layout()
+    plt.show()
+
+def calculate_dtw_distances(x_real, predictions):
+    """Calculate Dynamic Time Warping (DTW) distance for each pair of vectors."""
+    num_samples = x_real.shape[0]
+    dtw_distances = []
+
+    for i in range(num_samples):
+        distance = dtw.distance(x_real[i], predictions[i])
+        dtw_distances.append(distance)
+
+    mean_dtw = np.mean(dtw_distances)
+    print(f"Mean DTW Distance: {mean_dtw:.6f}")
+
+    return dtw_distances
+
+def calculate_dtw_for_index(x_real, predictions, index):
+    """Calculate Dynamic Time Warping (DTW) distance for a specific pair of vectors at the given index."""
+    if index >= len(x_real) or index >= len(predictions):
+        raise ValueError("Index out of bounds for the provided arrays.")
+
+    distance = dtw.distance(x_real[index], predictions[index])
+    print(f"DTW Distance for index {index}: {distance:.6f}")
+
+    return distance

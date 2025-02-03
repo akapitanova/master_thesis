@@ -251,4 +251,225 @@ def denormalize(data, lower_bound, upper_bound, norm_min=-1, norm_max=1):
     
     return original_data
 
+def plot_filtered_max_intensities_histogram(df, column="Intensities", bins=100, threshold=None):
+    """
+    Plots a histogram of the maximal values from the NumPy arrays in the specified column,
+    but only for rows where the max value is below the given threshold.
+    
+    Parameters:
+        df (pd.DataFrame): The input DataFrame.
+        column (str): The column containing NumPy arrays.
+        bins (int): Number of bins for the histogram.
+        threshold (float): The upper limit for max values to be included.
+    """
+    # Extract max values from each row's "Intensities" array
+    max_values = df[column].apply(lambda x: np.max(x))
 
+    if threshold:
+        # Filter values below the threshold
+        filtered_values = max_values[max_values < threshold]
+    else: 
+        filtered_values = max_values
+
+    # Check if there are values to plot
+    if filtered_values.empty:
+        print("No values below the threshold to plot.")
+        return
+
+    # Plot the histogram
+    plt.figure(figsize=(8, 5))
+    plt.hist(filtered_values, bins=bins, edgecolor="black", alpha=0.7)
+    plt.xlabel("Maximum Intensity")
+    plt.ylabel("Frequency")
+    if threshold:
+        plt.title(f"Histogram of Max Intensities (< {threshold})")
+    else:
+        plt.title(f"Histogram of Max Intensities")
+    plt.grid(axis="y", linestyle="--", alpha=0.7)
+    plt.show()
+
+def plot_random_intensity_vectors(wavelengths,
+                                  intensities,
+                                  num_vectors=5):
+    """
+    Plot random predicted intensity vectors into one graph.
+
+    Parameters:
+        wavelengths (numpy.ndarray): 1D array of wavelength values.
+        intensities (numpy.ndarray): 2D array where each row is a vector of intensities.
+        num_vectors (int): Number of vectors to randomly select and plot.
+
+    Returns:
+        None: Displays the graph.
+    """
+    # Randomly select num_vectors indices from predictions
+    random_indices = np.random.choice(len(intensities), size=num_vectors, replace=False)
+    print(random_indices)
+    random_vectors = intensities[random_indices]
+
+    # Plot the selected vectors
+    plt.figure(figsize=(12, 6))
+    for i, vector in enumerate(random_vectors):
+        plt.plot(wavelengths, vector, label=f"Vector {i+1}")
+
+    plt.title(f"{num_vectors} Random Intensity Vectors")
+    plt.xlabel("Wavelengths")
+    plt.ylabel("Intensities")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+def plot_hourly_histogram(df, time_column='Time'):
+    """
+    Plots a histogram showing the count of instances per hour.
+
+    Parameters:
+        df (pd.DataFrame): DataFrame containing a datetime column.
+        time_column (str): Column name containing datetime values.
+
+    Returns:
+        None: Displays the histogram.
+    """
+    df[time_column] = pd.to_datetime(df[time_column])
+    df['Hour'] = df[time_column].dt.hour
+    hourly_counts = df['Hour'].value_counts().sort_index()
+
+    min_hour, max_hour = hourly_counts.index.min(), hourly_counts.index.max()
+
+    # Ensure all hours within this range are present (fill missing with 0)
+    full_range = np.arange(min_hour, max_hour + 1)
+    hourly_counts = hourly_counts.reindex(full_range, fill_value=0)
+
+    plt.figure(figsize=(12, 6))
+    hourly_counts.plot(kind='bar', color='skyblue', width=0.8)
+    plt.title('Hourly Distribution of Entries (Daily Harmonogram)')
+    plt.xlabel('Hour of the Day')
+    plt.ylabel('Number of Entries')
+    plt.xticks(range(len(full_range)), labels=[f"{h}:00" for h in full_range], rotation=0)
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+
+    plt.tight_layout()
+    plt.show()
+
+def plot_daily_hourly_histograms(df, time_column='Time'):
+    """
+    Plots hourly histograms for each unique day in the dataset, sorted chronologically.
+
+    Parameters:
+        df (pd.DataFrame): DataFrame containing a datetime column.
+        time_column (str): Column name containing datetime values.
+
+    Returns:
+        None: Displays multiple histograms (one per day).
+    """
+    df[time_column] = pd.to_datetime(df[time_column])  
+    df['Date'] = df[time_column].dt.date 
+    df['Hour'] = df[time_column].dt.hour 
+
+    unique_dates = sorted(df['Date'].unique())
+
+    for date in unique_dates:
+        daily_data = df[df['Date'] == date]
+        hourly_counts = daily_data['Hour'].value_counts().sort_index()
+
+        # Ensure all hours are represented (fill missing with 0)
+        min_hour, max_hour = hourly_counts.index.min(), hourly_counts.index.max()
+        full_range = np.arange(min_hour, max_hour + 1)
+        hourly_counts = hourly_counts.reindex(full_range, fill_value=0)
+
+        plt.figure(figsize=(12, 6))
+        hourly_counts.plot(kind='bar', color='skyblue', width=0.8)
+
+        plt.title(f'Hourly Distribution of Entries on {date}')
+        plt.xlabel('Hour of the Day')
+        plt.ylabel('Number of Entries')
+        plt.xticks(range(len(full_range)), labels=[f"{h}:00" for h in full_range], rotation=0)
+        plt.grid(axis='y', linestyle='--', alpha=0.7)
+
+        plt.tight_layout()
+        plt.show()
+
+def plot_daily_max_intensity(df, time_column='Time', intensity_column='Intensities'):
+    """
+    Plots the maximum intensity per hour for each unique day in the dataset, sorted chronologically.
+
+    Parameters:
+        df (pd.DataFrame): DataFrame containing a datetime column and intensity values.
+        time_column (str): Column name containing datetime values.
+        intensity_column (str): Column name containing intensity values (lists or arrays).
+
+    Returns:
+        None: Displays multiple line plots (one per day).
+    """
+    df[time_column] = pd.to_datetime(df[time_column])
+    df['Date'] = df[time_column].dt.date
+    df['Hour'] = df[time_column].dt.hour
+
+    unique_dates = sorted(df['Date'].unique())
+
+    for date in unique_dates:
+        daily_data = df[df['Date'] == date].copy()
+        daily_data[intensity_column] = daily_data[intensity_column].apply(lambda x: np.max(np.array(x)) if isinstance(x, (list, np.ndarray)) else np.nan)
+        hourly_max_intensity = daily_data.groupby('Hour')[intensity_column].max()
+
+        min_hour, max_hour = hourly_max_intensity.index.min(), hourly_max_intensity.index.max()
+        full_range = np.arange(min_hour, max_hour + 1)
+        hourly_max_intensity = hourly_max_intensity.reindex(full_range, fill_value=np.nan)
+
+        # Bar plot for maximum intensity values per hour
+        plt.figure(figsize=(12, 6))
+        hourly_max_intensity.plot(kind='bar', color='skyblue', edgecolor='black', width=0.8)
+        plt.title(f'Maximum Intensity per Hour on {date}')
+        plt.xlabel('Hour of the Day')
+        plt.ylabel('Max Intensity')
+        plt.xticks(range(len(full_range)), labels=[f"{h}:00" for h in full_range], rotation=0)
+        plt.grid(axis='y', linestyle='--', alpha=0.7)
+
+        plt.tight_layout()
+
+def calculate_fwtm(wavelengths, intensities):
+    max_intensity = np.max(intensities)
+    tenth_max = max_intensity / 10
+    left_index = np.where(intensities >= tenth_max)[0][0]
+    right_index = np.where(intensities >= tenth_max)[0][-1]
+    fwtm = wavelengths[right_index] - wavelengths[left_index]
+    return fwtm, wavelengths[left_index], wavelengths[right_index]
+
+def plot_mean_intensity_per_hour_for_day(df, 
+                                         specific_date, 
+                                         time_column='Time', 
+                                         intensity_column='Intensities', 
+                                         wavelengths=None):
+    df[time_column] = pd.to_datetime(df[time_column])
+    df['Date'] = df[time_column].dt.date
+    daily_data = df[df['Date'] == specific_date]
+    daily_data['Hour'] = daily_data[time_column].dt.hour
+    unique_hours = sorted(daily_data['Hour'].unique())
+
+    for hour in unique_hours:
+        hourly_data = daily_data[daily_data['Hour'] == hour]
+        intensity_vectors = hourly_data[intensity_column].apply(lambda x: np.array(x) if isinstance(x, (list, np.ndarray)) else np.nan).dropna()
+
+        if len(intensity_vectors) > 0:
+            mean_intensity_vector = np.mean(np.vstack(intensity_vectors), axis=0)
+
+            mean_wavelength = np.sum(wavelengths * mean_intensity_vector) / np.sum(mean_intensity_vector)
+            fwtm, fwtm_start, fwtm_end = calculate_fwtm(wavelengths, mean_intensity_vector)
+
+            # Plotting
+            plt.figure(figsize=(12, 6))
+            plt.plot(wavelengths, mean_intensity_vector, label=f'Mean Intensity at Hour {hour}')
+            plt.axvline(mean_wavelength, color='red', linestyle='--', label=f'Mean Wavelength: {mean_wavelength:.2f} nm')
+            plt.axvline(fwtm_start, color='blue', linestyle=':', label=f'FWTM Start: {fwtm_start:.2f} nm')
+            plt.axvline(fwtm_end, color='blue', linestyle=':', label=f'FWTM End: {fwtm_end:.2f} nm')
+            plt.fill_betweenx([min(mean_intensity_vector), max(mean_intensity_vector)], fwtm_start, fwtm_end, color='blue', alpha=0.1, label=f'FWTM: {fwtm:.2f} nm')
+
+            plt.title(f'Mean Intensity Vector for Hour {hour} on {specific_date}')
+            plt.xlabel('Wavelengths')
+            plt.ylabel('Mean Intensity')
+            plt.legend()
+            plt.grid(True)
+
+            plt.tight_layout()
+            plt.show()

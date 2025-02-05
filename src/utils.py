@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
 from matplotlib.colors import LogNorm
 import seaborn as sns
 from scipy.stats import ttest_ind
@@ -649,3 +650,4 @@ def calculate_dtw_for_index(x_real, predictions, index):
     print(f"DTW Distance for index {index}: {distance:.6f}")
 
     return distance
+

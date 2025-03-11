@@ -1,4 +1,5 @@
 import copy
+import argparse
 
 from torch import optim
 from torch.utils.tensorboard import SummaryWriter
@@ -32,16 +33,17 @@ def train(args, model=None, finetune=False):
     #---------------------------------------------------------------------------
     if not model:
         print("Training from scratch")
-        model = EDMPrecond(img_resolution   = 1024,
-                            img_channels    = 1,
-                            label_dim       = 3,
-                            use_fp16        = False,
-                            sigma_min       = 0,
-                            sigma_max       = float('inf'),
-                            sigma_data      = 0.5,
-                            model_type      = 'UNet_conditional',
-                            device          = device
-                            ).to(device)
+        model = EDMPrecond(resolution   = args.length,
+                           channels    = 1,
+                           label_dim       = args.label_dim,
+                           use_fp16        = False,
+                           sigma_min       = 0,
+                           sigma_max       = float('inf'),
+                           sigma_data      = 0.5,
+                           model_type      = 'UNet_conditional',
+                           device          = device,
+                           dropout_rate    = args.dropout_rate
+                           ).to(device)
         optimizer = optim.AdamW(model.parameters(), lr=args.lr)
 
     else:
@@ -49,19 +51,20 @@ def train(args, model=None, finetune=False):
 
     #---------------------------------------------------------------------------
 
-    sampler = EdmSampler(net=model, num_steps=100)
+    sampler = EdmSampler(net=model, num_steps=args.edm_num_steps)
 
     scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs * steps_per_epoch)
     loss_fn = EDMLoss()
 
     logger = SummaryWriter(os.path.join("runs", args.run_name))
 
-    ema = EMA(0.995)
+    ema = EMA(args.ema_decay)
     ema_model = copy.deepcopy(model).eval().requires_grad_(False).to(device)
 
     model.train().requires_grad_(True)
+    
     # Training loop
-    for epoch in range(1, args.epochs+1):
+    for epoch in range(1, args.epochs + 1):
         logging.info(f"Starting epoch {epoch}:")
         pbar = tqdm(train_dataloader, desc=f"Epoch {epoch}/{args.epochs}")
         wavelengths = np.load('../data/wavelengths.npy')
@@ -70,20 +73,19 @@ def train(args, model=None, finetune=False):
             vectors = data['data'].to(device)
             settings = data['settings'].to(device)
 
-            if np.random.random() < 0.1:
+            # classifier-free guidance
+            if np.random.random() < args.cfg_scale:
                 settings = None
-
+                
+            # training step
             loss = loss_fn(net=model, images=vectors, labels=settings)
 
-            # Accumulate gradients
             optimizer.zero_grad()
             loss.mean().backward()
 
-            # Update weights
             optimizer.step()
             scheduler.step()
 
-            # TODO
             ema.step_ema(ema_model, model)
 
             pbar.set_postfix({"_Loss": "{:.4f}".format(loss.mean())})
@@ -139,33 +141,88 @@ def train(args, model=None, finetune=False):
                 epoch)
 
 
-def launch():
-    import argparse
-    parser = argparse.ArgumentParser()
+def launch():    
+    parser = argparse.ArgumentParser(description="Train EDM Model")
+    
+    # Model & Training Parameters
+    parser.add_argument("--run_name", 
+                        type=str, 
+                        default="edm_e300_bs16_do5_no-cg", 
+                        help="Run name for logging")
+    parser.add_argument("--epochs", 
+                        type=int, 
+                        default=300, 
+                        help="Number of training epochs")
+    parser.add_argument("--batch_size", 
+                        type=int, 
+                        default=16, 
+                        help="Batch size")
+    parser.add_argument("--length", 
+                        type=int, 
+                        default=1024, 
+                        help="Input length")
+    parser.add_argument("--device", 
+                        type=str, 
+                        default="cuda:1", 
+                        help="Training device (cuda or cpu)")
+    parser.add_argument("--lr", 
+                        type=float, 
+                        default=1e-3, 
+                        help="Learning rate")
+    parser.add_argument("--grad_acc", 
+                        type=int, 
+                        default=1, 
+                        help="Gradient accumulation steps")
+    parser.add_argument("--sample_freq", 
+                        type=int, 
+                        default=10, 
+                        help="Frequency of saving samples")
+    parser.add_argument("--n_samples", 
+                        type=int, 
+                        default=1, 
+                        help="Number of samples to generate")
+    parser.add_argument("--dropout_rate", 
+                        type=float, 
+                        default=0.05, 
+                        help="Dropout rate")
+    parser.add_argument("--ema_decay", 
+                        type=float, 
+                        default=0.995, 
+                        help="EMA decay rate")
+    parser.add_argument("--edm_num_steps", 
+                        type=int, 
+                        default=100, 
+                        help="Number of steps in EdmSampler")
+    parser.add_argument("--cfg_scale", 
+                        type=float, 
+                        default=0.0, 
+                        help="Classifier-Free Guidance scale (0 - no CFG)")
+    parser.add_argument("--data_path", 
+                        type=str, 
+                        default="../data/train_data_1024_[-1,1].csv", 
+                        help="Path to training data")
+    parser.add_argument("--sample_spectrum_path", 
+                        type=str, 
+                        default="../data/sample_spectrum.csv", 
+                        help="Path to sample spectrum")
+    parser.add_argument("--label_dim", 
+                        type=int, 
+                        default=3, 
+                        help="Number of labels (conditioning vector size)")
+    
     args = parser.parse_args()
-    args.run_name = "edm_mse_loss_e300_bs16"
-    args.epochs = 300
-    #args.epochs = 3
-    args.n_samples = 1
-    args.batch_size = 16
-    # length of the input
-    args.length = 1024
-    #args.length = 512
-    args.device = "cuda:1"
-    #args.device = "cpu"
-    args.lr = 1e-3
-    args.grad_acc = 1
-    args.sample_freq = 10
-    #args.sample_freq = 2
-    #data_path = "../data/test_data_1024_[-1,1]_0.csv"
-    data_path = "../data/train_data_1024_[-1,1].csv"
+
+    # Load dataset
+    data_path = args.data_path
     args.x_train, args.y_train = get_data(data_path)
 
-    # cond vector pro zkusebni datapoint behem prubezneho ukladani v trenovani
-    sample_spectrum_path = '../data/sample_spectrum.csv'
+    # Load sample spectrum
+    sample_spectrum_path = args.sample_spectrum_path
     data = pd.read_csv(sample_spectrum_path)
     args.sample_spectrum_real = np.array(data['intensities'].apply(lambda x: eval(x) if isinstance(x, str) else x).iloc[0])
     args.sample_settings = np.array(data['cond_vector'].apply(lambda x: eval(x) if isinstance(x, str) else x).iloc[0])
+
+    # Train model
     train(args, model=None)
 
 if __name__ == '__main__':

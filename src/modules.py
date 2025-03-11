@@ -91,7 +91,12 @@ class DoubleConv(nn.Module):
           return self.double_conv(x)
 
 class Down(nn.Module):
-  def __init__(self, in_channels, out_channels, emb_dim=256):
+  def __init__(self, 
+               in_channels, 
+               out_channels, 
+               emb_dim=256,
+               dropout_rate=0.05
+              ):
       super().__init__()
 
       self.maxpool_conv = nn.Sequential(
@@ -100,7 +105,7 @@ class Down(nn.Module):
           #    nn.MaxPool2d(2),
           DoubleConv(in_channels, in_channels, residual=True),
           DoubleConv(in_channels, out_channels),
-          # nn.Dropout(p=0.2),
+          nn.Dropout(p=dropout_rate),
       )
 
       self.emb_layer = nn.Sequential(
@@ -109,7 +114,7 @@ class Down(nn.Module):
               emb_dim,
               out_channels
           ),
-          # nn.Dropout(p=0.2),
+          nn.Dropout(p=dropout_rate),
       )
 
   def forward(self, x, t):
@@ -119,7 +124,12 @@ class Down(nn.Module):
       return x + emb
 
 class Up(nn.Module):
-  def __init__(self, in_channels, out_channels, emb_dim=256):
+  def __init__(self, 
+               in_channels, 
+               out_channels, 
+               emb_dim=256,
+               dropout_rate=0.05
+              ):
       super().__init__()
 
       # Changed Upsample mode to "linear" for 1D data
@@ -127,7 +137,7 @@ class Up(nn.Module):
       self.conv = nn.Sequential(
           DoubleConv(in_channels, in_channels, residual=True),
           DoubleConv(in_channels, out_channels, in_channels // 2),
-          # nn.Dropout(p=0.2),
+          nn.Dropout(p=dropout_rate),
       )
 
       self.emb_layer = nn.Sequential(
@@ -136,7 +146,7 @@ class Up(nn.Module):
               emb_dim,
               out_channels
           ),
-          # nn.Dropout(p=0.2),
+          nn.Dropout(p=dropout_rate),
       )
 
   def forward(self, x, skip_x, t):
@@ -156,28 +166,32 @@ class UNet_conditional(nn.Module):
                  time_dim=256,
                  device="cuda",
                  feat_num=3,
-                 length=1024,):
+                 length=1024,
+                 dropout_rate=0.05,
+                 sampler_type="EDM"):
+        
         super().__init__()
         self.device = device
         self.time_dim = time_dim
+        self.sampler_type = sampler_type
+        
         self.inc = DoubleConv(c_in, 64)
-        self.down1 = Down(64, 128)
-        # Updated SelfAttention dimensions for 1D input (length // 2)
+        self.down1 = Down(64, 128, dropout_rate=dropout_rate)
         self.sa1 = SelfAttention(128, length // 2)
-        self.down2 = Down(128, 256)
+        self.down2 = Down(128, 256, dropout_rate=dropout_rate)
         self.sa2 = SelfAttention(256, length // 4)
-        self.down3 = Down(256, 256)
+        self.down3 = Down(256, 256, dropout_rate=dropout_rate)
         self.sa3 = SelfAttention(256, length // 8)
 
         self.bot1 = DoubleConv(256, 512)
         self.bot2 = DoubleConv(512, 512)
         self.bot3 = DoubleConv(512, 256)
 
-        self.up1 = Up(512, 128)
+        self.up1 = Up(512, 128, dropout_rate=dropout_rate)
         self.sa4 = SelfAttention(128, length // 4)
-        self.up2 = Up(256, 64)
+        self.up2 = Up(256, 64, dropout_rate=dropout_rate)
         self.sa5 = SelfAttention(64, length // 2)
-        self.up3 = Up(128, 64)
+        self.up3 = Up(128, 64, dropout_rate=dropout_rate)
         self.sa6 = SelfAttention(64, length)
 
         self.outc = nn.Conv1d(64, c_out, kernel_size=1)
@@ -207,9 +221,8 @@ class UNet_conditional(nn.Module):
             y = self.label_prep(y).squeeze()
             t += y
 
-
-        # TODO problem for ddim
-        #x = torch.unsqueeze(x, 1)
+        if self.sampler_type == "DDIM":
+            x = torch.unsqueeze(x, 1)
 
         x1 = self.inc(x)
         x2 = self.down1(x1, t)
@@ -240,31 +253,34 @@ class UNet_conditional(nn.Module):
 
 class EDMPrecond(torch.nn.Module):
     def __init__(self,
-        img_resolution,                     # Image resolution.
-        img_channels,                       # Number of color channels.
-        label_dim       = 0,                # Number of class labels, 0 = unconditional.
-        use_fp16        = False,            # Execute the underlying model at FP16 precision?
-        sigma_min       = 0,                # Minimum supported noise level.
-        sigma_max       = float('inf'),     # Maximum supported noise level.
-        sigma_data      = 0.5,              # Expected standard deviation of the training data.
-        model_type      = 'UNet_conditional',   # Class name of the underlying model.
-        device          = 'cuda' 
+                 resolution,                     # Image resolution.
+                 channels,                       # Number of color channels.
+                 label_dim       = 0,                # Number of class labels, 0 = unconditional.
+                 use_fp16        = False,            # Execute the underlying model at FP16 precision?
+                 sigma_min       = 0,                # Minimum supported noise level.
+                 sigma_max       = float('inf'),     # Maximum supported noise level.
+                 sigma_data      = 0.5,              # Expected standard deviation of the training data.
+                 model_type      = 'UNet_conditional',   # Class name of the underlying model.
+                 device          = 'cuda',
+                 dropout_rate    = 0.05
     ):
         super().__init__()
-        self.img_resolution = img_resolution
-        self.img_channels = img_channels
+        self.resolution = resolution
+        self.channels = channels
         self.label_dim = label_dim
         self.use_fp16 = use_fp16
         self.sigma_min = sigma_min
         self.sigma_max = sigma_max
         self.sigma_data = sigma_data
-        self.model = globals()[model_type](c_in = img_channels,
-                                            c_out = img_channels,
+        self.model = globals()[model_type](c_in = channels,
+                                            c_out = channels,
                                             time_dim = 256,
-                                            #device = "cuda",
-                                            device=device,
+                                            device = device,
                                             feat_num = label_dim,
-                                            length = img_resolution)
+                                            length = resolution,
+                                            dropout_rate = dropout_rate,
+                                            sampler_type = "EDM"
+                                          )
 
 
     def forward(self,

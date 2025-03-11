@@ -5,10 +5,13 @@ import torch
 from matplotlib.colors import LogNorm
 import seaborn as sns
 from scipy.stats import ttest_ind
-from dtaidistance import dtw
+from dtw import *
 from tabulate import tabulate
 import os
 import csv
+
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Save multiple vectors as a single plot
 def save_images(vectors,
@@ -633,7 +636,7 @@ def calculate_dtw_distances(x_real, predictions):
     dtw_distances = []
 
     for i in range(num_samples):
-        distance = dtw.distance(x_real[i], predictions[i])
+        distance = dtw(x_real[i], predictions[i])
         dtw_distances.append(distance)
 
     mean_dtw = np.mean(dtw_distances)
@@ -646,7 +649,7 @@ def calculate_dtw_for_index(x_real, predictions, index):
     if index >= len(x_real) or index >= len(predictions):
         raise ValueError("Index out of bounds for the provided arrays.")
 
-    distance = dtw.distance(x_real[index], predictions[index])
+    distance = dtw(x_real[index], predictions[index])
     print(f"DTW Distance for index {index}: {distance:.6f}")
 
     return distance

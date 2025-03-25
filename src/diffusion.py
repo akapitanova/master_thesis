@@ -165,8 +165,6 @@ class GaussianDiffusion:
                          device=None,
                          eta=0.0,
                          n=4,
-                         #resize=(256, 512),
-                         # gain=0
                          ):
         """
         Generate samples from the model using DDIM.
@@ -596,21 +594,13 @@ class EdmSampler:
     def round_sigma(self, sigma):
         return torch.as_tensor(sigma)
 
-    def sample(self, length, device, class_labels=None, n_samples=1):
+    def sample(self, resolution, device, settings=None, n_samples=1, cfg_scale=3, settings_dim=0):
         """
         Runs the diffusion sampling process.
-
-        Args:
-        - length: Length of the latent vectors.
-        - device: Device to run the sampling on.
-        - class_labels: Optional class labels for conditional generation.
-        - n_samples: Number of samples to generate in parallel.
-
-        Returns:
-        - Final sampled tensor after the diffusion process.
         """
         # Create initial latents.
-        latents = self.randn_like(torch.empty((n_samples, length), device=device))
+        latents = self.randn_like(torch.empty((n_samples, resolution), device=device))
+
 
         #sigma_min = max(self.sigma_min, self.net.sigma_min)
         #sigma_max = min(self.sigma_max, self.net.sigma_max)
@@ -633,25 +623,36 @@ class EdmSampler:
         x_next = latents.to(torch.float32) * t_steps[0]
         for i, (t_cur, t_next) in enumerate(zip(t_steps[:-1], t_steps[1:])):  # 0, ..., N-1
             x_cur = x_next
-
             # Increase noise temporarily.
             gamma = min(self.S_churn / self.num_steps, np.sqrt(2) - 1) if self.S_min <= t_cur <= self.S_max else 0
             t_hat = self.round_sigma(t_cur + gamma * t_cur)
             x_hat = x_cur + (t_hat ** 2 - t_cur ** 2).sqrt() * self.S_noise * self.randn_like(x_cur)
-
             # Euler step.
             with torch.no_grad():
-                denoised = self.net(x_hat, t_hat, class_labels).to(torch.float32)
+                denoised_uncond = self.net(x_hat, t_hat, None).to(torch.float32)
+                denoised = None
+                if settings_dim != 0: 
+                    denoised_cond = self.net(x_hat, t_hat, settings).to(torch.float32)
+                    denoised = denoised_uncond + cfg_scale * (denoised_cond - denoised_uncond)
+                    #print("cond")
+                else:
+                    denoised = denoised_uncond
+                    #print('just uncond')
             d_cur = (x_hat - denoised) / t_hat
             x_next = x_hat + (t_next - t_hat) * d_cur
 
             # Apply 2nd order correction.
             if i < self.num_steps - 1:
                 with torch.no_grad():
-                    denoised = self.net(x_next, t_next, class_labels).to(torch.float32)
+                    denoised_uncond = self.net(x_next, t_next, None).to(torch.float32)
+                    denoised = None
+                    if settings_dim != 0: 
+                        denoised_cond = self.net(x_next, t_next, settings).to(torch.float32)
+                        denoised = denoised_uncond + cfg_scale * (denoised_cond - denoised_uncond)
+                    else:
+                        denoised = denoised_uncond
                 d_prime = (x_next - denoised) / t_next
                 x_next = x_hat + (t_next - t_hat) * (0.5 * d_cur + 0.5 * d_prime)
-
         x_next = transform_vector(x_next)
 
         return x_next

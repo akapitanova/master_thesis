@@ -8,11 +8,6 @@ class EMA:
   helps smooth out the model's parameters during training,
   which can lead to a more stable and better-performing
   model by averaging recent updates with past parameter values.
-
-  Exponential Moving Average it's a technique used to make results
-  better and more stable training. It works by keeping a copy of
-  the model weights of the previous iteration
-  and updating the current iteration weights by a factor of (1-beta).
   """
   def __init__(self, beta):
       super().__init__()
@@ -43,11 +38,11 @@ class EMA:
 class SelfAttention(nn.Module):
   def __init__(self,
                 channels,
-                length
+                resolution
                 ):
       super(SelfAttention, self).__init__()
       self.channels = channels
-      self.length = length
+      self.resolution = resolution
       self.mha = nn.MultiheadAttention(channels, 4, batch_first=True)
       self.ln = nn.LayerNorm([channels])
       self.ff_self = nn.Sequential(
@@ -58,14 +53,13 @@ class SelfAttention(nn.Module):
       )
 
   def forward(self, x):
-      # Reshape to (batch, length, channels) for 1D compatibility
-      x = x.view(-1, self.length, self.channels)
+      x = x.view(-1, self.resolution, self.channels)
       x_ln = self.ln(x)
       attention_value, _ = self.mha(x_ln, x_ln, x_ln)
       attention_value = attention_value + x
       attention_value = self.ff_self(attention_value) + attention_value
-      # Reshape back to (batch, channels, length)
-      return attention_value.view(-1, self.channels, self.length)
+      # Reshape back to (batch, channels, resolution)
+      return attention_value.view(-1, self.channels, self.resolution)
 
 class DoubleConv(nn.Module):
   def __init__(self, in_channels, out_channels, mid_channels=None, residual=False):
@@ -119,7 +113,6 @@ class Down(nn.Module):
 
   def forward(self, x, t):
       x = self.maxpool_conv(x)
-      # Embedding repeated along the new length dimension for 1D data
       emb = self.emb_layer(t)[:, :, None].repeat(1, 1, x.shape[-1])
       return x + emb
 
@@ -153,7 +146,6 @@ class Up(nn.Module):
       x = self.up(x)
       x = torch.cat([skip_x, x], dim=1)
       x = self.conv(x)
-      # Embedding repeated along the new length dimension for 1D data
       emb = self.emb_layer(t)[:, :, None].repeat(1, 1, x.shape[-1])
       return x + emb
 
@@ -165,8 +157,8 @@ class UNet_conditional(nn.Module):
                  c_out=1,
                  time_dim=256,
                  device="cuda",
-                 feat_num=3,
-                 length=1024,
+                 settings_dim=13,
+                 resolution=1024,
                  dropout_rate=0.05,
                  sampler_type="EDM"):
         
@@ -177,28 +169,28 @@ class UNet_conditional(nn.Module):
         
         self.inc = DoubleConv(c_in, 64)
         self.down1 = Down(64, 128, dropout_rate=dropout_rate)
-        self.sa1 = SelfAttention(128, length // 2)
+        self.sa1 = SelfAttention(128, resolution // 2)
         self.down2 = Down(128, 256, dropout_rate=dropout_rate)
-        self.sa2 = SelfAttention(256, length // 4)
+        self.sa2 = SelfAttention(256, resolution // 4)
         self.down3 = Down(256, 256, dropout_rate=dropout_rate)
-        self.sa3 = SelfAttention(256, length // 8)
+        self.sa3 = SelfAttention(256, resolution // 8)
 
         self.bot1 = DoubleConv(256, 512)
         self.bot2 = DoubleConv(512, 512)
         self.bot3 = DoubleConv(512, 256)
 
         self.up1 = Up(512, 128, dropout_rate=dropout_rate)
-        self.sa4 = SelfAttention(128, length // 4)
+        self.sa4 = SelfAttention(128, resolution // 4)
         self.up2 = Up(256, 64, dropout_rate=dropout_rate)
-        self.sa5 = SelfAttention(64, length // 2)
+        self.sa5 = SelfAttention(64, resolution // 2)
         self.up3 = Up(128, 64, dropout_rate=dropout_rate)
-        self.sa6 = SelfAttention(64, length)
+        self.sa6 = SelfAttention(64, resolution)
 
         self.outc = nn.Conv1d(64, c_out, kernel_size=1)
 
         self.label_prep = nn.Sequential(
-           nn.BatchNorm1d(feat_num),
-           nn.Linear(feat_num, time_dim),
+           nn.BatchNorm1d(settings_dim),
+           nn.Linear(settings_dim, time_dim),
            nn.SiLU(),
         )
 
@@ -253,10 +245,9 @@ class UNet_conditional(nn.Module):
 
 class EDMPrecond(torch.nn.Module):
     def __init__(self,
-                 resolution,                     # Image resolution.
-                 channels,                       # Number of color channels.
-                 label_dim       = 0,                # Number of class labels, 0 = unconditional.
-                 use_fp16        = False,            # Execute the underlying model at FP16 precision?
+                 resolution      = 1024,                     # Image resolution.
+                 channels        = 1,                       # Number of color channels.
+                 settings_dim    = 13,                # Number of class labels, 0 = unconditional.
                  sigma_min       = 0,                # Minimum supported noise level.
                  sigma_max       = float('inf'),     # Maximum supported noise level.
                  sigma_data      = 0.5,              # Expected standard deviation of the training data.
@@ -267,8 +258,7 @@ class EDMPrecond(torch.nn.Module):
         super().__init__()
         self.resolution = resolution
         self.channels = channels
-        self.label_dim = label_dim
-        self.use_fp16 = use_fp16
+        self.settings_dim = settings_dim
         self.sigma_min = sigma_min
         self.sigma_max = sigma_max
         self.sigma_data = sigma_data
@@ -276,8 +266,8 @@ class EDMPrecond(torch.nn.Module):
                                             c_out = channels,
                                             time_dim = 256,
                                             device = device,
-                                            feat_num = label_dim,
-                                            length = resolution,
+                                            settings_dim = settings_dim,
+                                            resolution = resolution,
                                             dropout_rate = dropout_rate,
                                             sampler_type = "EDM"
                                           )
@@ -286,11 +276,11 @@ class EDMPrecond(torch.nn.Module):
     def forward(self,
                 x,
                 sigma,
-                class_labels=None
+                settings=None
                 ):
         x = x.to(torch.float32)
         sigma = sigma.to(torch.float32).reshape(-1, 1, 1)
-        class_labels = None if self.label_dim == 0 or class_labels is None else class_labels.to(torch.float32).reshape(-1, self.label_dim)
+        settings = None if self.settings_dim == 0 or settings is None else settings.to(torch.float32).reshape(-1, self.settings_dim)
         dtype = torch.float32
 
         c_skip = self.sigma_data ** 2 / (sigma ** 2 + self.sigma_data ** 2)
@@ -300,7 +290,7 @@ class EDMPrecond(torch.nn.Module):
 
         F_x = self.model((c_in * x).to(dtype),
                          c_noise.flatten(),
-                         class_labels)
+                         settings)
         assert F_x.dtype == dtype
         F_x = torch.unsqueeze(F_x, 1)
         D_x = c_skip * x + c_out * F_x.to(torch.float32)
@@ -310,3 +300,17 @@ class EDMPrecond(torch.nn.Module):
         return torch.as_tensor(sigma)
 
 #----------------------------------------------------------------------------
+
+class MaxScalePredictor(nn.Module):
+    def __init__(self, input_dim=13):
+        super(MaxScalePredictor, self).__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, 1) 
+        )
+
+    def forward(self, x):
+        return torch.tanh(self.net(x)).squeeze(-1)

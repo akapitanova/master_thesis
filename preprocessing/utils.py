@@ -210,7 +210,7 @@ def analyze_outliers(data, lower_percentile, upper_percentile):
 
     return lower_bound, upper_bound
 
-def clip_and_normalize(data, lower_bound, upper_bound, norm_min=0, norm_max=1):
+def clip_and_normalize(data, lower_bound, upper_bound, norm_min=-1, norm_max=1):
     """
     Clips and normalizes the data to a specified range.
     

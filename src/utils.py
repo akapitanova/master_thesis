@@ -13,25 +13,6 @@ import csv
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-# Save multiple vectors as a single plot
-def save_images(vectors,
-                true_vector,
-                cond_vector,
-                wavelengths,
-                path,
-                epoch):
-    plt.figure(figsize=(12, 6))
-    cond_str = ', '.join([f"{val:.2f}" for val in cond_vector])
-    for i, vector in enumerate(vectors):
-        plt.plot(wavelengths, vector, label=f"Predicted sample {i+1}")
-    plt.plot(wavelengths, true_vector, label=f"True spectrum")
-    plt.xlabel("Wavelengths")
-    plt.ylabel("Intensity")
-    plt.title(f"Epoch: {epoch} | Cond: [{cond_str}]")
-    plt.legend()
-    plt.savefig(path)
-    plt.close()
-
 def create_spectrogram(wavelengths,
                        intensities,
                        label="Spectrogram of Intensities by Wavelength"):
@@ -258,7 +239,7 @@ def plot_combined_intensity_vectors_with_parameters(wavelengths,
     selected_predicted = predicted[indices]
     selected_conditions = cond_vectors[indices]
 
-    fig, axes = plt.subplots(num_vectors, 1, figsize=(8, 2 * num_vectors), sharex=True, sharey=True)
+    fig, axes = plt.subplots(num_vectors, 1, figsize=(8, 4 * num_vectors), sharex=True, sharey=True)
 
     # If only one row (num_vectors=1), ensure axes is iterable
     if num_vectors == 1:
@@ -271,9 +252,11 @@ def plot_combined_intensity_vectors_with_parameters(wavelengths,
         ax.plot(wavelengths, selected_predicted[i], label='Predicted', color='tab:orange')
 
         mse = np.mean((selected_real[i] - selected_predicted[i]) ** 2)
+        
+        cond_chunks = np.array_split(selected_conditions[i], 1) 
+        cond_str = "\n".join([', '.join([f"{val:.2f}" for val in chunk]) for chunk in cond_chunks])
 
-        cond_str = ", ".join([f"{v:.3f}" for v in selected_conditions[i]])
-        ax.set_title(f"Vector {i+1} | Parameters: [{cond_str}] | MSE: {mse:.4f}")
+        ax.set_title(f"Conditional Vector:\n[{cond_str}]\n(MSE: {mse:.4f})", fontsize=10)
 
         if i == num_vectors - 1:
             ax.set_xlabel("Wavelengths")
@@ -462,12 +445,12 @@ def analyze_mse_and_cond_vectors(mse,
 
 def plot_predictions_with_cond_vectors(predictions, cond_vectors, num_rows=20):
     """
-    Plots predicted intensity vectors and displays corresponding conditional vectors in the title.
+    Plots predicted intensity vectors and displays corresponding conditional vectors split into multiple rows.
 
     Parameters:
         predictions (numpy.ndarray): Array of predicted intensity vectors.
         cond_vectors (numpy.ndarray): Array of corresponding conditional vectors.
-        num_rows (int): Number of rows in the subgraph (default is 5).
+        num_rows (int): Number of rows in the subgraph.
 
     Returns:
         None
@@ -478,13 +461,13 @@ def plot_predictions_with_cond_vectors(predictions, cond_vectors, num_rows=20):
         ax = axes[i]
         ax.plot(predictions[i], label='Predicted Intensities', color='b')
 
-        cond_str = ', '.join([f"{val:.2f}" for val in cond_vectors[i]])
-        ax.set_title(f"Vector {i + 1} | Conditional Vector: [{cond_str}]", fontsize=10)
+        cond_chunks = np.array_split(cond_vectors[i], 3) 
+        cond_str = "\n".join([', '.join([f"{val:.2f}" for val in chunk]) for chunk in cond_chunks])
 
+        ax.set_title(f"Conditional Vector:\n[{cond_str}]", fontsize=10)
         ax.set_xlabel('Index')
         ax.set_ylabel('Intensity')
         ax.grid(True)
-
         ax.legend(loc='upper right')
 
     plt.tight_layout()
@@ -630,27 +613,5 @@ def plot_comparison(index, wavelengths, x_real, predictions, cond_vectors):
     plt.tight_layout()
     plt.show()
 
-def calculate_dtw_distances(x_real, predictions):
-    """Calculate Dynamic Time Warping (DTW) distance for each pair of vectors."""
-    num_samples = x_real.shape[0]
-    dtw_distances = []
 
-    for i in range(num_samples):
-        distance = dtw(x_real[i], predictions[i])
-        dtw_distances.append(distance)
-
-    mean_dtw = np.mean(dtw_distances)
-    print(f"Mean DTW Distance: {mean_dtw:.6f}")
-
-    return dtw_distances
-
-def calculate_dtw_for_index(x_real, predictions, index):
-    """Calculate Dynamic Time Warping (DTW) distance for a specific pair of vectors at the given index."""
-    if index >= len(x_real) or index >= len(predictions):
-        raise ValueError("Index out of bounds for the provided arrays.")
-
-    distance = dtw(x_real[index], predictions[index])
-    print(f"DTW Distance for index {index}: {distance:.6f}")
-
-    return distance
 

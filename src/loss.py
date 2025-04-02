@@ -29,7 +29,7 @@ class EDMLoss:
         n = torch.randn_like(y) * sigma
         D_yn = net(y + n, sigma, settings)
 
-        mse = nn.MSELoss()
+        #mse = nn.MSELoss()
         loss = weight * ((D_yn - y) ** 2)
         return loss
 

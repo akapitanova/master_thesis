@@ -15,7 +15,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from modules import EMA, UNet_conditional, MaxScalePredictor
 from diffusion import prepare_noise_schedule, GaussianDiffusion, SpacedDiffusion
 from dataset import CustomDataset, get_data
-from train_utils import setup_logging, normalize_vectors, save_samples, save_images, save_model
+from train_utils import setup_logging, normalize_vectors, save_samples, save_images, save_model, evaluate_and_save_metrics, save_training_loss
 
 
 def train(args, model=None, finetune=False):
@@ -25,6 +25,14 @@ def train(args, model=None, finetune=False):
     # Load dataset
     train_dataset = CustomDataset(args.intensities, args.settings)
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+
+    # Load the val dataset
+    x_val, y_val = get_data(args.val_data_path)
+
+    val_dataset = CustomDataset(x_val, y_val)
+    val_dataloader = DataLoader(val_dataset,
+                                 batch_size=1,
+                                 shuffle=False)
 
     gradient_acc = args.grad_acc
     l = len(train_dataloader)
@@ -134,10 +142,16 @@ def train(args, model=None, finetune=False):
 
         # Save samples periodically
         if args.sample_freq and epoch % args.sample_freq == 0:
-            save_samples(epoch, scale_predictor, sampler, wavelengths, args, s_type='ddim', model=model)
+            save_samples(epoch, scale_predictor, sampler, wavelengths, args, s_type='ddim', model=ema_model)
 
         # Save model after each epoch
         save_model(args, ema_model, optimizer, scale_predictor, epoch)
+
+        # evaluate on val data
+        evaluate_and_save_metrics(ema_model, scale_predictor, sampler, val_dataloader, device, epoch, "ddim", args)
+        
+        # Save training loss after each epoch
+        save_training_loss(epoch, loss.item(), scale_loss.item(), args)
 
     # Save final samples and model
     save_samples(epoch, scale_predictor, sampler, wavelengths, args, s_type='ddim', model=model)
@@ -216,6 +230,10 @@ def launch():
                         type=str, 
                         default="../data/train_data_stg7_norm.csv", 
                         help="Path to training data")
+    parser.add_argument("--val_data_path", 
+                        type=str, 
+                        default="../data/val_data_stg7_norm.csv", 
+                        help="Path to validation data")
     parser.add_argument("--sample_spectrum_path", 
                         type=str, 
                         default="../data/sample_spectrum_stgF.csv", 

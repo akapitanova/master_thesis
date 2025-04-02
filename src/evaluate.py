@@ -29,10 +29,11 @@ def save_predictions(x_real, cond_vectors, predictions, predictions_path):
     # Convert lists of lists into CSV-friendly string format
     x_real_str = [','.join(map(str, row)) for row in x_real]
     cond_vectors_str = [','.join(map(str, row)) for row in cond_vectors]
-    
+    preds_str = [','.join(map(str, row)) for row in predictions]
     # Ensure predictions is in the correct format before slicing
-    predictions = torch.tensor(predictions) if isinstance(predictions, list) else predictions
-    preds_str = [','.join(map(str, row)) for row in predictions[:, 0, 0, :].tolist()]
+    #predictions = torch.tensor(predictions) if isinstance(predictions, list) else predictions
+    #preds_str = [','.join(map(str, row)) for row in predictions[:, 0, 0, :].tolist()]
+    #preds_str = [','.join(map(str, row)) for row in predictions.tolist()]
     
     # Create and save dataframe
     df = pd.DataFrame({'x_real': x_real_str, 'cond_vectors': cond_vectors_str, 'predictions': preds_str})
@@ -53,9 +54,9 @@ def predict(model,
     """
     Return predictions using the specified sampler.
     """
-    x_real = []
-    cond_vectors = []
-    predictions = []
+    x_real = np.empty((0,))  
+    cond_vectors = np.empty((0,))
+    predictions = np.empty((0,))  
 
     model.eval()
 
@@ -64,36 +65,40 @@ def predict(model,
             vectors = data['data'].to(device)
             resolution = vectors.size(1)
             settings = data['settings'].to(device)
-
+ 
             if s_type == 'ddim':
-                pred = sampler.ddim_sample_loop(model=model,
+                pred = sampler.ddim_sample_loop(
+                                                model=model,
                                                 y=settings,
                                                 cfg_scale=cfg_scale,
                                                 device=device,
                                                 eta=1,
                                                 n=n_samples,
-                                                
                                                 )
             elif s_type == 'edm':
                 pred = sampler.sample(
-                    resolution=resolution,
-                    device=device,
-                    settings=settings,
-                    n_samples=n_samples,
-                    cfg_scale=cfg_scale,
-                    settings_dim=settings_dim
-                
-                )
+                                    resolution=resolution,
+                                    device=device,
+                                    settings=settings,
+                                    n_samples=n_samples,
+                                    cfg_scale=cfg_scale,
+                                    settings_dim=settings_dim
+                                    )
 
             predicted_max_scale = scale_predictor(settings).detach()
             
             pred = normalize_sampled_vectors(pred, device, predicted_max_scale)
 
-            x_real.extend(vectors.cpu().tolist() * n_samples)
-            cond_vectors.extend(settings.cpu().tolist() * n_samples)
-            predictions.append(pred.cpu().tolist())
-
-    return x_real, cond_vectors, predictions
+            # Convert to NumPy and repeat where necessary
+            vectors_np = vectors.cpu().numpy().repeat(n_samples, axis=0)
+            settings_np = settings.cpu().numpy().repeat(n_samples, axis=0)
+            pred_np = pred.cpu().numpy()
+    
+            # Append using np.concatenate
+            x_real = np.concatenate((x_real, vectors_np), axis=0) if x_real.size else vectors_np
+            cond_vectors = np.concatenate((cond_vectors, settings_np), axis=0) if cond_vectors.size else settings_np
+            predictions = np.concatenate((predictions, pred_np), axis=0) if predictions.size else pred_np
+    return x_real, cond_vectors, predictions[:, 0, :]
 
 
 def evaluate(device,

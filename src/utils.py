@@ -38,7 +38,7 @@ def create_spectrogram(wavelengths,
     histogram, x_edges, y_edges = np.histogram2d(all_wavelengths, all_intensities, bins=[wavelength_bins, intensity_bins])
 
     # Plot the spectrogram with a logarithmic color scale
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(12, 6), dpi=300)
     plt.pcolormesh(x_edges, 
                    y_edges, 
                    histogram.T, 
@@ -82,7 +82,7 @@ def create_difference_spectrogram(wavelengths,
     histogram, x_edges, y_edges = np.histogram2d(all_wavelengths, intensity_differences,
                                                  bins=[wavelength_bins, difference_bins])
 
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(12, 6), dpi=300)
     plt.pcolormesh(x_edges,
                    y_edges,
                    histogram.T,
@@ -138,7 +138,7 @@ def create_combined_spectrogram(wavelengths, real, predicted):
                                                   bins=[wavelength_bins, signed_difference_bins])
 
     # Plot the combined spectrogram
-    fig, axes = plt.subplots(2, 2, figsize=(14, 8))  # 2x2 grid
+    fig, axes = plt.subplots(2, 2, figsize=(14, 8), dpi=300)  # 2x2 grid
 
     # Top-left: Original spectrogram
     axes[0, 0].pcolormesh(wavelength_bins, intensity_bins, hist_real.T, shading='auto', cmap='viridis',
@@ -239,7 +239,7 @@ def plot_combined_intensity_vectors_with_parameters(wavelengths,
     selected_predicted = predicted[indices]
     selected_conditions = cond_vectors[indices]
 
-    fig, axes = plt.subplots(num_vectors, 1, figsize=(8, 4 * num_vectors), sharex=True, sharey=True)
+    fig, axes = plt.subplots(num_vectors, 1, figsize=(8, 4 * num_vectors), sharex=True, sharey=True, dpi=300)
 
     # If only one row (num_vectors=1), ensure axes is iterable
     if num_vectors == 1:
@@ -349,7 +349,7 @@ def mse_statistics(true_values, predicted_values):
             print(f"{key}: {value:.4f}" if isinstance(value, (float, int)) else f"{key}: {value}")
 
     # Create boxplot of MSE values
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(12, 6), dpi=300)
     plt.boxplot(mse, vert=False, patch_artist=True, boxprops=dict(facecolor='lightblue'))
     plt.title("Boxplot of MSE Values")
     plt.xlabel("MSE")
@@ -423,7 +423,7 @@ def analyze_mse_and_cond_vectors(mse,
     for stat, value in low_mse_stats.items():
         print(f"  {stat.capitalize()}: {value}")
 
-    fig, axs = plt.subplots(3, 1, figsize=(6, 12))
+    fig, axs = plt.subplots(3, 1, figsize=(6, 12), dpi=300)
 
     for i, param_name in enumerate(parameter_names):
         ax = axs[i]
@@ -455,7 +455,7 @@ def plot_predictions_with_cond_vectors(predictions, cond_vectors, num_rows=20):
     Returns:
         None
     """
-    fig, axes = plt.subplots(num_rows, 1, figsize=(7, 45))
+    fig, axes = plt.subplots(num_rows, 1, figsize=(7, 45), dpi=300)
 
     for i in range(num_rows):
         ax = axes[i]

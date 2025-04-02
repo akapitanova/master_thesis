@@ -23,8 +23,6 @@ class GaussianDiffusion:
     def __init__(self,
                  betas,
                  noise_steps=1000,
-                 # img_height=120,
-                 # img_width=300,
                  length=1024,
                  device="cuda"):  # beta_start=1e-4, beta_end=0.02
         self.noise_steps = noise_steps
@@ -62,8 +60,6 @@ class GaussianDiffusion:
                                      torch.sqrt(self.alpha) /
                                      (1.0 - self.alpha_hat)).to(device)
 
-        # self.img_height = img_height
-        # self.img_width = img_width
         self.length = length
         self.device = device
 
@@ -76,13 +72,8 @@ class GaussianDiffusion:
         Adding noise to images.
         This method takes an image tensor x and adds noise to it at timestep t.
         """
-        # sqrt_alpha_hat = torch.sqrt(self.alpha_hat[t])[:, None, None, None]
-        # sqrt_one_minus_alpha_hat = torch.sqrt(1 - self.alpha_hat[t])[:, None, None, None]
         sqrt_alpha_hat = torch.sqrt(self.alpha_hat[t])[:, None]
         sqrt_one_minus_alpha_hat = torch.sqrt(1 - self.alpha_hat[t])[:, None]
-
-        # Remove channel dimenson
-        #x = torch.squeeze(x, 1)
 
         if eps == None:
             eps = torch.randn_like(x)
@@ -90,9 +81,8 @@ class GaussianDiffusion:
 
         noised_vector = sqrt_alpha_hat * x + sqrt_one_minus_alpha_hat * eps
 
-        # Add channel dimension back
-        #noised_vector = torch.unsqueeze(noised_vector, 1)
-        #eps = torch.unsqueeze(eps, 1)
+        noised_vector = torch.unsqueeze(noised_vector, 1)
+        eps = torch.unsqueeze(eps, 1)
 
         return noised_vector, eps
 
@@ -110,7 +100,6 @@ class GaussianDiffusion:
                     n,
                     settings,
                     cfg_scale=3,
-                    #resize=None
                     ):
         """
         This method uses the DDPM (Denoising Diffusion Probabilistic Model)
@@ -123,7 +112,6 @@ class GaussianDiffusion:
         model.eval()
 
         with torch.no_grad():
-            # x = torch.randn((n, 1, self.img_height, self.img_width)).to(self.device)
             x = torch.randn((n, 1, self.length)).to(self.device)
             for i in tqdm(reversed(range(1, self.noise_steps)), position=0):
                 t = (torch.ones(n) * i).long().to(self.device)
@@ -133,9 +121,6 @@ class GaussianDiffusion:
                     predicted_noise = torch.lerp(uncond_predicted_noise,
                                                  predicted_noise,
                                                  cfg_scale)
-                # alpha = self.alpha[t][:, None, None, None]
-                # alpha_hat = self.alpha_hat[t][:, None, None, None]
-                # beta = self.beta[t][:, None, None, None]
                 alpha = self.alpha[t][:, None]
                 alpha_hat = self.alpha_hat[t][:, None]
                 beta = self.beta[t][:, None]
@@ -151,11 +136,6 @@ class GaussianDiffusion:
         model.train()
 
         x = (x.clamp(-1, 1) + 1) / 2
-        #x = (x * 255).type(torch.uint8)
-        x = (x * 3925).type(torch.uint8)
-
-        #if resize:
-        #    x = f.resize(x, resize, antialias=True)
         return x
 
     def ddim_sample_loop(self,
@@ -182,18 +162,10 @@ class GaussianDiffusion:
                                                         n=n):
             final = sample
 
+        #print(f'sample: {final["sample"]}')
+        #final["sample"] = transform_vector(final["sample"])
 
-        #final["sample"] = (final["sample"].clamp(0, 1))
-        #final["sample"] = (final["sample"].clamp(-1, 1))
-
-        final["sample"] = transform_vector(final["sample"])
-        final["sample"] = (final["sample"])
-
-        #if resize:
-        #    final["sample"] = f.resize(final["sample"], resize, antialias=True)
-        # if gain:
-        #    final["sample"] = remove_gain(final["sample"], gain, tensor=True)
-        return final["sample"].squeeze()
+        return final["sample"]
 
     def ddim_sample_loop_progressive(self,
                                      model,
@@ -209,9 +181,8 @@ class GaussianDiffusion:
         Same usage as p_sample_loop_progressive().
         """
         indices = list(range(self.noise_steps))[::-1]
-        #img = torch.randn((n, 1, self.img_height, self.img_width), device=device)
-        img = torch.randn((n, self.length), device=device)
-        #for i in tqdm(indices, desc=f"ddim sample loop"):
+        img = torch.randn((n, 1, self.length), device=device)
+
         for i in indices:
             t = torch.tensor([i] * len(img), device=device)
             with torch.no_grad():
@@ -221,6 +192,7 @@ class GaussianDiffusion:
                                        y,
                                        cfg_scale,
                                        eta=eta)
+                
                 out['t'] = t
                 yield out
                 img = out["sample"]
@@ -231,21 +203,18 @@ class GaussianDiffusion:
                     t,
                     y,
                     cfg_scale=3,
-                    eta=0.0):  # TODO why is eta 0, isnt nonzero_mask * sigma * noise always 0 then?
+                    eta=0.0): 
         """
         Sample x_{t-1} from the model using DDIM.
         """
         out = self.p_mean_variance(model, x, t.to(self.device), y, cfg_scale)
-
+        
         # Usually our model outputs epsilon, but we re-derive it
         # in case we used x_start or x_prev prediction.
         eps = self._predict_eps_from_xstart(x, t, out["pred_xstart"])
-        # eps = out["model_forward"]
-
-        # alpha_bar = self.alpha_hat[t][:, None, None, None]
-        # alpha_bar_prev = self.alpha_hat_prev[t][:, None, None, None]
-        alpha_bar = self.alpha_hat[t][:, None]
-        alpha_bar_prev = self.alpha_hat_prev[t][:, None]
+        
+        alpha_bar = self.alpha_hat[t][:, None, None]
+        alpha_bar_prev = self.alpha_hat_prev[t][:, None, None]
 
         sigma = eta * torch.sqrt((1 - alpha_bar_prev) / (1 - alpha_bar)) * torch.sqrt(1 - alpha_bar / alpha_bar_prev)
 
@@ -256,6 +225,7 @@ class GaussianDiffusion:
         nonzero_mask = (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
 
         sample = mean_pred + nonzero_mask * sigma * noise
+
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
 
     def p_mean_variance(self,
@@ -281,13 +251,15 @@ class GaussianDiffusion:
         """
 
         model_output = model.forward(x, t, y)
+        
         if cfg_scale > 0:
             uncond_model_output = model(x, t, None)
+            
             model_output = torch.lerp(uncond_model_output,
                                       model_output,
                                       cfg_scale)
+            
         if vartype == "fixed_large":
-            # print(self.posterior_variance[1])
             model_variance = torch.cat((self.posterior_variance[1].reshape(1),
                                         self.beta[1:]), dim=0)
             model_log_variance = torch.log(model_variance)
@@ -296,11 +268,9 @@ class GaussianDiffusion:
             model_variance = self.posterior_variance
             model_log_variance = self.posterior_log_variance_clipped
 
-        # model_variance = model_variance[t][:, None, None, None]
-        # model_log_variance = model_log_variance[t][:, None, None, None]
-        model_variance = model_variance[t][:, None]
-        model_log_variance = model_log_variance[t][:, None]
-
+        model_variance = model_variance[t][:, None, None]
+        model_log_variance = model_log_variance[t][:, None, None]
+    
         pred_xstart = self._predict_xstart_from_eps(x_t=x, t=t, eps=model_output)
         model_mean, _, _ = self.q_posterior_mean_variance(x_start=pred_xstart, x_t=x, t=t)
         return {
@@ -312,19 +282,11 @@ class GaussianDiffusion:
         }
 
     def _predict_xstart_from_eps(self, x_t, t, eps):
-        # return self.sqrt_recip_alpha_hat[t][:, None, None, None] * x_t - self.sqrt_recipm1_alpha_hat[t][:, None, None, None] * eps
-        #x_t = torch.squeeze(x_t, 1)
-        #eps = torch.squeeze(eps, 1)
-        res = self.sqrt_recip_alpha_hat[t][:, None] * x_t - self.sqrt_recipm1_alpha_hat[t][:, None] * eps
-        #res = torch.unsqueeze(res, 1)
+        res = self.sqrt_recip_alpha_hat[t][:, None, None] * x_t - self.sqrt_recipm1_alpha_hat[t][:, None, None] * eps
         return res
 
     def _predict_eps_from_xstart(self, x_t, t, pred_xstart):
-        # return (self.sqrt_recip_alpha_hat[t][:, None, None, None] * x_t - pred_xstart) / self.sqrt_recipm1_alpha_hat[t][:, None, None, None]
-        #x_t = torch.squeeze(x_t, 1)
-        #pred_xstart = torch.squeeze(pred_xstart, 1)
-        res = (self.sqrt_recip_alpha_hat[t][:, None] * x_t - pred_xstart) / self.sqrt_recipm1_alpha_hat[t][:, None]
-        #res = torch.unsqueeze(res, 1)
+        res = (self.sqrt_recip_alpha_hat[t][:, None, None] * x_t - pred_xstart) / self.sqrt_recipm1_alpha_hat[t][:, None, None]
         return res
 
     def q_posterior_mean_variance(self, x_start, x_t, t):
@@ -332,19 +294,12 @@ class GaussianDiffusion:
         Compute the mean and variance of the diffusion posterior:
             q(x_{t-1} | x_t, x_0)
         """
-        # posterior_mean = (
-        #    self.posterior_mean_coef1[t][:, None, None, None] *
-        #    x_start +
-        #    self.posterior_mean_coef2[t][:, None, None, None] *
-        #    x_t)
-        # posterior_variance = self.posterior_variance[t][:, None, None, None]
-        # posterior_log_variance_clipped = self.posterior_log_variance_clipped[t][:, None, None, None]
 
         posterior_mean = (
-                self.posterior_mean_coef1[t][:, None] * x_start +
-                self.posterior_mean_coef2[t][:, None] * x_t)
-        posterior_variance = self.posterior_variance[t][:, None]
-        posterior_log_variance_clipped = self.posterior_log_variance_clipped[t][:, None]
+                self.posterior_mean_coef1[t][:, None, None] * x_start +
+                self.posterior_mean_coef2[t][:, None, None] * x_t)
+        posterior_variance = self.posterior_variance[t][:, None, None]
+        posterior_log_variance_clipped = self.posterior_log_variance_clipped[t][:, None, None]
 
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
 
@@ -364,8 +319,6 @@ class SpacedDiffusion(GaussianDiffusion):
                  beta_end,
                  section_counts,
                  noise_steps=1000,
-                 # img_height=120,
-                 # img_width=300,
                  length=1024,
                  device="cuda",
                  rescale_timesteps=False):
@@ -375,7 +328,7 @@ class SpacedDiffusion(GaussianDiffusion):
                                                 beta_end)
         # Create a list of timesteps to use from an original diffusion process
         self.use_timesteps = space_timesteps(num_timesteps=noise_steps,
-                                             section_counts=section_counts)  # f'ddim{noise_steps}')
+                                             section_counts=section_counts) 
 
         # how the new t's mapped to the old t's
         self.timestep_map = []
@@ -384,8 +337,6 @@ class SpacedDiffusion(GaussianDiffusion):
 
         base_diffusion = GaussianDiffusion(noise_steps=noise_steps,
                                            betas=original_betas,
-                                           # img_height=img_height,
-                                           # img_width=img_width,
                                            length=length,
                                            device=device)
         last_alpha_hat = 1.0
@@ -400,8 +351,6 @@ class SpacedDiffusion(GaussianDiffusion):
         noise_steps = len(self.timestep_map)
         super().__init__(betas,
                          noise_steps,
-                         # img_height,
-                         # img_width,
                          length,
                          device)
 
@@ -523,19 +472,7 @@ def space_timesteps(num_timesteps, section_counts):
         start_idx += size
     return set(all_steps)
 
-
-    #model, timestep_map, rescale_timesteps, original_num_steps
-
 def transform_vector(vector):
-        """
-        Transforms the vector by multiplying it by -1 and normalizing its values between 0 and 1.
-    
-        Args:
-        - vector: Input tensor to be transformed.
-    
-        Returns:
-        - Transformed tensor.
-        """
     
         # Normalize values
         min_val = torch.min(vector, dim=-1, keepdim=True).values
@@ -599,11 +536,8 @@ class EdmSampler:
         Runs the diffusion sampling process.
         """
         # Create initial latents.
-        latents = self.randn_like(torch.empty((n_samples, resolution), device=device))
+        latents = self.randn_like(torch.empty((n_samples, 1, resolution), device=device))
 
-
-        #sigma_min = max(self.sigma_min, self.net.sigma_min)
-        #sigma_max = min(self.sigma_max, self.net.sigma_max)
         sigma_min = self.sigma_min
         sigma_max = self.sigma_max
 
@@ -614,36 +548,40 @@ class EdmSampler:
             + step_indices / (self.num_steps - 1) * (sigma_min ** (1 / self.rho)
                                                      - sigma_max ** (1 / self.rho))
         ) ** self.rho
-        # t_N = 0
         t_steps = torch.cat([self.round_sigma(t_steps), torch.zeros_like(t_steps[:1])])
 
         # Main sampling loop.
         self.net.eval()
 
         x_next = latents.to(torch.float32) * t_steps[0]
+       
         for i, (t_cur, t_next) in enumerate(zip(t_steps[:-1], t_steps[1:])):  # 0, ..., N-1
             x_cur = x_next
+            
             # Increase noise temporarily.
             gamma = min(self.S_churn / self.num_steps, np.sqrt(2) - 1) if self.S_min <= t_cur <= self.S_max else 0
             t_hat = self.round_sigma(t_cur + gamma * t_cur)
             x_hat = x_cur + (t_hat ** 2 - t_cur ** 2).sqrt() * self.S_noise * self.randn_like(x_cur)
+
             # Euler step.
             with torch.no_grad():
+                #denoised = self.net(x_hat, t_hat, settings).to(torch.float32)
                 denoised_uncond = self.net(x_hat, t_hat, None).to(torch.float32)
                 denoised = None
                 if settings_dim != 0: 
                     denoised_cond = self.net(x_hat, t_hat, settings).to(torch.float32)
-                    denoised = denoised_uncond + cfg_scale * (denoised_cond - denoised_uncond)
-                    #print("cond")
+                    denoised = denoised_uncond + cfg_scale * (denoised_cond - denoised_uncond) 
+
                 else:
                     denoised = denoised_uncond
-                    #print('just uncond')
+
             d_cur = (x_hat - denoised) / t_hat
             x_next = x_hat + (t_next - t_hat) * d_cur
-
+        
             # Apply 2nd order correction.
             if i < self.num_steps - 1:
                 with torch.no_grad():
+                    #denoised = self.net(x_next, t_next, settings).to(torch.float32)
                     denoised_uncond = self.net(x_next, t_next, None).to(torch.float32)
                     denoised = None
                     if settings_dim != 0: 
@@ -653,6 +591,8 @@ class EdmSampler:
                         denoised = denoised_uncond
                 d_prime = (x_next - denoised) / t_next
                 x_next = x_hat + (t_next - t_hat) * (0.5 * d_cur + 0.5 * d_prime)
-        x_next = transform_vector(x_next)
-
+    
+        #x_next = transform_vector(x_next)
         return x_next
+
+        #return x_next.clamp(-1,1)

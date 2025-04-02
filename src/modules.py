@@ -68,7 +68,6 @@ class DoubleConv(nn.Module):
       if not mid_channels:
           mid_channels = out_channels
 
-      # Changed Conv2d to Conv1d for 1D data processing
       self.double_conv = nn.Sequential(
           nn.Conv1d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False),
           nn.GroupNorm(1, mid_channels),
@@ -94,9 +93,7 @@ class Down(nn.Module):
       super().__init__()
 
       self.maxpool_conv = nn.Sequential(
-          # Changed MaxPool2d to MaxPool1d for 1D data
           nn.MaxPool1d(2),
-          #    nn.MaxPool2d(2),
           DoubleConv(in_channels, in_channels, residual=True),
           DoubleConv(in_channels, out_channels),
           nn.Dropout(p=dropout_rate),
@@ -125,7 +122,6 @@ class Up(nn.Module):
               ):
       super().__init__()
 
-      # Changed Upsample mode to "linear" for 1D data
       self.up = nn.Upsample(scale_factor=2, mode="linear", align_corners=True)
       self.conv = nn.Sequential(
           DoubleConv(in_channels, in_channels, residual=True),
@@ -153,8 +149,6 @@ class Up(nn.Module):
 class UNet_conditional(nn.Module):
 
     def __init__(self,
-                 c_in=1,
-                 c_out=1,
                  time_dim=256,
                  device="cuda",
                  settings_dim=13,
@@ -167,7 +161,7 @@ class UNet_conditional(nn.Module):
         self.time_dim = time_dim
         self.sampler_type = sampler_type
         
-        self.inc = DoubleConv(c_in, 64)
+        self.inc = DoubleConv(1, 64)
         self.down1 = Down(64, 128, dropout_rate=dropout_rate)
         self.sa1 = SelfAttention(128, resolution // 2)
         self.down2 = Down(128, 256, dropout_rate=dropout_rate)
@@ -186,7 +180,7 @@ class UNet_conditional(nn.Module):
         self.up3 = Up(128, 64, dropout_rate=dropout_rate)
         self.sa6 = SelfAttention(64, resolution)
 
-        self.outc = nn.Conv1d(64, c_out, kernel_size=1)
+        self.outc = nn.Conv1d(64, 1, kernel_size=1)
 
         self.label_prep = nn.Sequential(
            nn.BatchNorm1d(settings_dim),
@@ -213,9 +207,6 @@ class UNet_conditional(nn.Module):
             y = self.label_prep(y).squeeze()
             t += y
 
-        if self.sampler_type == "DDIM":
-            x = torch.unsqueeze(x, 1)
-
         x1 = self.inc(x)
         x2 = self.down1(x1, t)
         x2 = self.sa1(x2)
@@ -236,7 +227,6 @@ class UNet_conditional(nn.Module):
         x = self.sa6(x)
         output = self.outc(x)
 
-        output = torch.squeeze(output, 1)
         return output
 
 #----------------------------------------------------------------------------
@@ -246,7 +236,6 @@ class UNet_conditional(nn.Module):
 class EDMPrecond(torch.nn.Module):
     def __init__(self,
                  resolution      = 1024,                     # Image resolution.
-                 channels        = 1,                       # Number of color channels.
                  settings_dim    = 13,                # Number of class labels, 0 = unconditional.
                  sigma_min       = 0,                # Minimum supported noise level.
                  sigma_max       = float('inf'),     # Maximum supported noise level.
@@ -257,14 +246,11 @@ class EDMPrecond(torch.nn.Module):
     ):
         super().__init__()
         self.resolution = resolution
-        self.channels = channels
         self.settings_dim = settings_dim
         self.sigma_min = sigma_min
         self.sigma_max = sigma_max
         self.sigma_data = sigma_data
-        self.model = globals()[model_type](c_in = channels,
-                                            c_out = channels,
-                                            time_dim = 256,
+        self.model = globals()[model_type](time_dim = 256,
                                             device = device,
                                             settings_dim = settings_dim,
                                             resolution = resolution,
@@ -292,7 +278,6 @@ class EDMPrecond(torch.nn.Module):
                          c_noise.flatten(),
                          settings)
         assert F_x.dtype == dtype
-        F_x = torch.unsqueeze(F_x, 1)
         D_x = c_skip * x + c_out * F_x.to(torch.float32)
         return D_x
 

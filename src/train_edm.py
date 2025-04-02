@@ -4,6 +4,7 @@ import os
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from sklearn.utils import shuffle
 
 import torch
 import torch.nn as nn
@@ -14,10 +15,11 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from modules import EMA, EDMPrecond, MaxScalePredictor
 from diffusion import EdmSampler
-from train_utils import setup_logging, normalize_vectors, save_samples, save_images, save_model
+from train_utils import setup_logging, normalize_vectors, save_samples, save_images, save_model, evaluate_and_save_metrics, save_training_loss
 from dataset import CustomDataset, get_data
 from loss import EDMLoss
 from evaluate import normalize_sampled_vectors
+
 
 
 def train(args, model=None, finetune=False):
@@ -25,8 +27,18 @@ def train(args, model=None, finetune=False):
     device = args.device
     
     # Load dataset
-    train_dataset = CustomDataset(args.intensities, args.settings)
+    x_train, y_train = args.intensities, args.settings
+    x_train, y_train = shuffle(x_train, y_train, random_state=42)
+    train_dataset = CustomDataset(x_train, y_train)
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+
+    # Load the val dataset
+    x_val, y_val = get_data(args.val_data_path)
+
+    val_dataset = CustomDataset(x_val, y_val)
+    val_dataloader = DataLoader(val_dataset,
+                                 batch_size=1,
+                                 shuffle=False)
 
     gradient_acc = args.grad_acc
     l = len(train_dataloader)
@@ -40,19 +52,19 @@ def train(args, model=None, finetune=False):
                            device          = device,
                            dropout_rate    = args.dropout_rate
                            ).to(device)
-        optimizer = optim.AdamW(model.parameters(), lr=args.lr)
+        optimizer = optim.AdamW(model.parameters(), lr=0.001)
 
     else:
-        optimizer = optim.AdamW(model.parameters(), lr=args.lr)
+        optimizer = optim.AdamW(model.parameters(), lr=0.001)
 
     #---------------------------------------------------------------------------
     scale_predictor = MaxScalePredictor(input_dim=args.settings_dim).to(device)
-    scale_optimizer = optim.AdamW(scale_predictor.parameters(), lr=args.lr)
+    scale_optimizer = optim.AdamW(scale_predictor.parameters(), lr=0.01)
 
-    sampler = EdmSampler(net=model, num_steps=args.edm_num_steps)
+    sampler = EdmSampler(net=model, num_steps=args.noise_steps)
 
-    scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs * steps_per_epoch)
-    scale_scheduler = CosineAnnealingLR(scale_optimizer, T_max=args.epochs * steps_per_epoch)
+    scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs * steps_per_epoch, eta_min = 0)
+    scale_scheduler = CosineAnnealingLR(scale_optimizer, T_max=args.epochs * steps_per_epoch, eta_min = 0)
 
     loss_fn = EDMLoss()
     scale_loss_fn = nn.MSELoss()
@@ -95,7 +107,10 @@ def train(args, model=None, finetune=False):
                 settings = None
                 
             # training step
-            loss = loss_fn(net=model, y=normalized_intensities, settings=settings)
+            loss = loss_fn(net=model, 
+                           y=normalized_intensities, 
+                           #predicted_scale=predicted_scale.detach(), 
+                           settings=settings)
 
             optimizer.zero_grad()
             loss.mean().backward()
@@ -118,6 +133,12 @@ def train(args, model=None, finetune=False):
 
         # Save model after each epoch
         save_model(args, ema_model, optimizer, scale_predictor, epoch)
+
+        # evaluate on val data
+        evaluate_and_save_metrics(model, scale_predictor, sampler, val_dataloader, device, epoch, "edm", args)
+
+        # Save training loss after each epoch
+        save_training_loss(epoch, loss.mean(), scale_loss.item(), args)
 
     # Save final samples and model
     save_samples(epoch, scale_predictor, sampler, wavelengths, args)
@@ -174,7 +195,7 @@ def launch():
                         help="EMA decay rate")
     parser.add_argument("--noise_steps", 
                         type=int, 
-                        default=100, 
+                        default=20, 
                         help="Number of steps in EdmSampler")
     parser.add_argument("--cfg_scale_train", 
                         type=float, 
@@ -188,6 +209,10 @@ def launch():
                         type=str, 
                         default="../data/train_data_stg7_norm.csv", 
                         help="Path to training data")
+    parser.add_argument("--val_data_path", 
+                        type=str, 
+                        default="../data/val_data_stg7_norm.csv", 
+                        help="Path to validation data")
     parser.add_argument("--sample_spectrum_path", 
                         type=str, 
                         default="../data/sample_spectrum_stgF.csv", 

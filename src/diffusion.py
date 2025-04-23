@@ -4,6 +4,7 @@ from tqdm import tqdm
 import logging
 from torchsummary import summary
 import torchvision.transforms.functional as f
+from scipy.stats import beta as beta_dist
 
 def prepare_noise_schedule(noise_steps, beta_start, beta_end):
     """
@@ -163,7 +164,7 @@ class GaussianDiffusion:
             final = sample
 
         #print(f'sample: {final["sample"]}')
-        #final["sample"] = transform_vector(final["sample"])
+        final["sample"] = transform_vector(final["sample"])
 
         return final["sample"]
 
@@ -474,16 +475,38 @@ def space_timesteps(num_timesteps, section_counts):
 
 def transform_vector(vector):
     
-        # Normalize values
-        min_val = torch.min(vector, dim=-1, keepdim=True).values
-        max_val = torch.max(vector, dim=-1, keepdim=True).values
+    # Normalize values
+    #min_val = torch.min(vector, dim=-1, keepdim=True).values
+    #max_val = torch.max(vector, dim=-1, keepdim=True).values
 
-        norm_min = -1
-        norm_max = 1
+    #norm_min = 0
+    #norm_max = 1200
 
-        normalized_vector = norm_min + (vector - min_val) * (norm_max - norm_min) / (max_val - min_val)
+    #normalized_vector = norm_min + (vector - min_val) * (norm_max - norm_min) / (max_val - min_val)
+
+    #return normalized_vector
+    vector = (vector.clamp(-1, 1) + 1) / 2
+    vector = vector * 1200
+
+    min_val = torch.min(vector, dim=-1, keepdim=True).values
+    max_val = torch.max(vector, dim=-1, keepdim=True).values
+
+    norm_min = 0
+    norm_max = max_val
+
+    epsilon = 1e-8
+    normalized_vector = norm_min + (vector - min_val) * (norm_max - norm_min) / (max_val - min_val + epsilon)
+
+    return normalized_vector
+
+def beta_cfg_weight(t_norm, a=2.0, b=2.0):
+    """
+    Scales guidance by the beta distribution.
+    t_norm: normalized timestep [0, 1]
+    a, b: shape parameters
+    """
+    return beta_dist.pdf(t_norm, a, b)
     
-        return normalized_vector
 
 class EdmSampler:
     """
@@ -566,13 +589,29 @@ class EdmSampler:
             # Euler step.
             with torch.no_grad():
                 #denoised = self.net(x_hat, t_hat, settings).to(torch.float32)
-                denoised_uncond = self.net(x_hat, t_hat, None).to(torch.float32)
                 denoised = None
-                if settings_dim != 0: 
+                
+                if cfg_scale == -1:
+                    denoised = self.net(x_hat, t_hat, settings).to(torch.float32)
+                    
+                elif settings_dim != 0: 
+                    denoised_uncond = self.net(x_hat, t_hat, None).to(torch.float32)
                     denoised_cond = self.net(x_hat, t_hat, settings).to(torch.float32)
+
+                    # β-CFG logic here
+                    #t_norm = (i + 1) / self.num_steps
+                    #beta_weight = beta_cfg_weight(t_norm=t_norm, a=0.5, b=0.5)
+                    #gamma = 1.0
+                
+                    #guidance = denoised_cond - denoised_uncond
+                    #norm = guidance.norm(p=2, dim=1, keepdim=True).clamp(min=1e-5) ** gamma
+                    #norm = 1
+                
+                    #denoised = denoised_uncond + (cfg_scale * beta_weight * guidance / norm)
                     denoised = denoised_uncond + cfg_scale * (denoised_cond - denoised_uncond) 
 
                 else:
+                    denoised_uncond = self.net(x_hat, t_hat, None).to(torch.float32)
                     denoised = denoised_uncond
 
             d_cur = (x_hat - denoised) / t_hat
@@ -582,17 +621,32 @@ class EdmSampler:
             if i < self.num_steps - 1:
                 with torch.no_grad():
                     #denoised = self.net(x_next, t_next, settings).to(torch.float32)
-                    denoised_uncond = self.net(x_next, t_next, None).to(torch.float32)
                     denoised = None
-                    if settings_dim != 0: 
+                    if cfg_scale == -1:
+                        denoised = self.net(x_next, t_next, settings).to(torch.float32)
+                        
+                    elif settings_dim != 0: 
+                        denoised_uncond = self.net(x_next, t_next, None).to(torch.float32)
                         denoised_cond = self.net(x_next, t_next, settings).to(torch.float32)
+
+                        # β-CFG logic here
+                        #t_norm = (i + 1) / self.num_steps
+                        #beta_weight = beta_cfg_weight(t_norm=t_norm, a=0.5, b=0.5)
+                        #gamma = 1.0
+                    
+                        #guidance = denoised_cond - denoised_uncond
+                        #norm = guidance.norm(p=2, dim=1, keepdim=True).clamp(min=1e-5) ** gamma
+                        #norm = 1
+                        #denoised = denoised_uncond + (cfg_scale * beta_weight * guidance / norm)
+                    
                         denoised = denoised_uncond + cfg_scale * (denoised_cond - denoised_uncond)
+                        
                     else:
+                        denoised_uncond = self.net(x_next, t_next, None).to(torch.float32)
                         denoised = denoised_uncond
+                        
                 d_prime = (x_next - denoised) / t_next
                 x_next = x_hat + (t_next - t_hat) * (0.5 * d_cur + 0.5 * d_prime)
     
-        #x_next = transform_vector(x_next)
+        x_next = transform_vector(x_next)
         return x_next
-
-        #return x_next.clamp(-1,1)

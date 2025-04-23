@@ -231,6 +231,11 @@ def clip_and_normalize(data, lower_bound, upper_bound, norm_min=-1, norm_max=1):
     normalized_data = norm_min + (clipped_data - lower_bound) * (norm_max - norm_min) / (upper_bound - lower_bound)
     
     return normalized_data
+    
+def clip_lower_to_zero(data, lower_bound):
+    clipped_data = np.array(data, copy=True)
+    clipped_data[clipped_data < lower_bound] = 0
+    return clipped_data
 
 def denormalize(data, lower_bound, upper_bound, norm_min=-1, norm_max=1):
     """

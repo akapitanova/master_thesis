@@ -3,18 +3,29 @@ import numpy as np
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 
-from modules import UNet_conditional, EDMPrecond, MaxScalePredictor
+from modules import UNet_conditional, EDMPrecond
 from diffusion import GaussianDiffusion, SpacedDiffusion, EdmSampler
 from utils import *
 from dataset import CustomDataset, get_data
+from metrics import calculate_dtw_distances, calculate_wasserstein_distance
 
-def normalize_sampled_vectors(vectors, device, predicted_max_scale):
-    """Normalizes input vectors between -1 and 1."""
-    lower_bound = vectors.min(dim=-1, keepdim=True)[0]
-    upper_bound = vectors.max(dim=-1, keepdim=True)[0]
-    norm_min = torch.tensor([-1], device=device).reshape(-1, 1, 1)
-    norm_max = predicted_max_scale.reshape(-1, 1, 1)
-    return norm_min + (vectors - lower_bound) * (norm_max - norm_min) / (upper_bound - lower_bound)
+
+def calculate_metrics(x_real, predictions, print_results=True):
+    # Compute metrics
+    mse_error = np.mean((x_real - predictions) ** 2, axis=1)
+    mean_mse = np.mean(mse_error)
+    wasserstein_distances, mean_wasserstein = calculate_wasserstein_distance(x_real, predictions)
+    dtw_distances = calculate_dtw_distances(x_real, predictions)
+    mean_dtw = np.mean(dtw_distances)
+
+    if print_results:
+        # Print metrics
+        print(f"MSE error: {mean_mse:.6f}")
+        print(f"Mean Wasserstein Distance: {mean_wasserstein:.6f}")
+        print(f"Mean DTW Distance: {mean_dtw:.6f}")
+
+    return mse_error, mean_mse, wasserstein_distances, mean_wasserstein, dtw_distances, mean_dtw
+
 
 def save_predictions(x_real, cond_vectors, predictions, predictions_path):
     """
@@ -30,10 +41,6 @@ def save_predictions(x_real, cond_vectors, predictions, predictions_path):
     x_real_str = [','.join(map(str, row)) for row in x_real]
     cond_vectors_str = [','.join(map(str, row)) for row in cond_vectors]
     preds_str = [','.join(map(str, row)) for row in predictions]
-    # Ensure predictions is in the correct format before slicing
-    #predictions = torch.tensor(predictions) if isinstance(predictions, list) else predictions
-    #preds_str = [','.join(map(str, row)) for row in predictions[:, 0, 0, :].tolist()]
-    #preds_str = [','.join(map(str, row)) for row in predictions.tolist()]
     
     # Create and save dataframe
     df = pd.DataFrame({'x_real': x_real_str, 'cond_vectors': cond_vectors_str, 'predictions': preds_str})
@@ -43,7 +50,6 @@ def save_predictions(x_real, cond_vectors, predictions, predictions_path):
 
 
 def predict(model,
-            scale_predictor,
             sampler,
             test_dl,
             device,
@@ -85,16 +91,10 @@ def predict(model,
                                     settings_dim=settings_dim
                                     )
 
-            predicted_max_scale = scale_predictor(settings).detach()
-            
-            pred = normalize_sampled_vectors(pred, device, predicted_max_scale)
-
-            # Convert to NumPy and repeat where necessary
             vectors_np = vectors.cpu().numpy().repeat(n_samples, axis=0)
             settings_np = settings.cpu().numpy().repeat(n_samples, axis=0)
             pred_np = pred.cpu().numpy()
     
-            # Append using np.concatenate
             x_real = np.concatenate((x_real, vectors_np), axis=0) if x_real.size else vectors_np
             cond_vectors = np.concatenate((cond_vectors, settings_np), axis=0) if cond_vectors.size else settings_np
             predictions = np.concatenate((predictions, pred_np), axis=0) if predictions.size else pred_np
@@ -104,7 +104,6 @@ def predict(model,
 def evaluate(device,
              test_csv_path,
              model_path,
-             scale_predictor_path,
              n_samples=1,
              s_type='edm',
              settings_dim=13,
@@ -139,14 +138,6 @@ def evaluate(device,
         
     else:
         raise ValueError("Unknown model type. Please use 'ddim' or 'edm'.")
-
-    # Load model for scale prediction
-    scale_predictor = MaxScalePredictor().to(device)
-    ckpt_sp = torch.load(scale_predictor_path,
-                         map_location=device,
-                         weights_only=True
-                        )
-    scale_predictor.load_state_dict(ckpt_sp)
     
     # Load the test dataset
     x_test, y_test = get_data(test_csv_path)
@@ -156,8 +147,7 @@ def evaluate(device,
                                  batch_size=1,
                                  shuffle=False)
 
-    x_real, cond_vectors, predictions = predict(model,                      
-                                                scale_predictor,
+    x_real, cond_vectors, predictions = predict(model,            
                                                 sampler,
                                                 test_dataloader,
                                                 device=device,
@@ -176,7 +166,6 @@ def main():
     parser.add_argument("--test_csv_path", type=str, required=True, help="Path to the test dataset CSV file.")
     parser.add_argument("--predictions_path", type=str, required=True, help="Path to save the predictions CSV file.")
     parser.add_argument("--model_path", type=str, required=True, help="Path to the trained model checkpoint.")
-    parser.add_argument("--scale_predictor_path", type=str, required=True, help="Path to the scale predictor model checkpoint.")
     parser.add_argument("--n_samples", type=int, default=1, help="Number of samples to generate per test instance.")
     parser.add_argument("--s_type", type=str, choices=["edm", "ddim"], default="edm", help="Sampling type: 'edm' or 'ddim'.")
     parser.add_argument("--settings_dim", type=int, default=13, help="Dimensionality of conditioning settings.")
@@ -190,7 +179,6 @@ def main():
         device=args.device,
         test_csv_path=args.test_csv_path,
         model_path=args.model_path,
-        scale_predictor_path=args.scale_predictor_path,
         n_samples=args.n_samples,
         s_type=args.s_type,
         settings_dim=args.settings_dim,

@@ -46,9 +46,12 @@ def create_spectrogram(wavelengths,
                    cmap='viridis', 
                    norm=LogNorm(vmin=1, vmax=histogram.max()))
     plt.colorbar(label='Number of Occurrences (Log Scale)')
-    plt.xlabel('Wavelengths')
-    plt.ylabel('Intensities')
-    plt.title(label)
+    plt.xlabel('Wavelengths', fontsize=18)
+    plt.ylabel('Intensities', fontsize=18)
+    plt.title(label, fontsize=18)
+    
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
     
     plt.tight_layout()
     plt.show()
@@ -90,10 +93,15 @@ def create_difference_spectrogram(wavelengths,
                    cmap='seismic',
                    norm=LogNorm(vmin=1, vmax=histogram.max()))
     plt.colorbar(label='Number of Occurrences (Log Scale)')
-    plt.xlabel('Wavelengths')
-    plt.ylabel('Differences (Real - Predicted)')
-    plt.title(label)
-
+    plt.xlabel('Wavelengths', fontsize=18)
+    plt.ylabel('Differences (Real - Predicted)', fontsize=18)
+    plt.title(label, fontsize=18)
+    
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
+    
+    plt.ylim(-1200, 1200)
+    
     plt.tight_layout()
     plt.show()
 
@@ -247,26 +255,27 @@ def plot_combined_intensity_vectors_with_parameters(wavelengths,
 
     # Plot the vectors
     for i, ax in enumerate(axes):
+        
         # Plot true and predicted vectors
         ax.plot(wavelengths, selected_real[i], label='True', color='tab:blue')
         ax.plot(wavelengths, selected_predicted[i], label='Predicted', color='tab:orange')
-
-        mse = np.mean((selected_real[i] - selected_predicted[i]) ** 2)
         
         cond_chunks = np.array_split(selected_conditions[i], 1) 
         cond_str = "\n".join([', '.join([f"{val:.2f}" for val in chunk]) for chunk in cond_chunks])
 
-        ax.set_title(f"Conditional Vector:\n[{cond_str}]\n(MSE: {mse:.4f})", fontsize=10)
+        ax.set_title(f"Conditional Vector:\n[{cond_str}]", fontsize=10)
+
+        ax.set_ylim(0, 1200)
 
         if i == num_vectors - 1:
             ax.set_xlabel("Wavelengths")
         if i == 0:
             ax.set_ylabel("Intensity")
         ax.grid(True)
+        
 
     axes[0].legend()
 
-    fig.suptitle("Comparison of True and Predicted Intensity Vectors with Parameters", fontsize=14)
     fig.tight_layout(rect=[0, 0, 1, 0.95])
 
     plt.show()
@@ -294,6 +303,20 @@ def get_worst_mse_indices(true_values,
     worst_indices = np.argsort(mse)[-n:]
 
     return worst_indices
+
+def get_best_mse_indices(true_values,
+                          predicted_values,
+                          n=10):
+    """
+    Calculate MSE for each vector and return the indices of the vectors with the best MSE.
+
+    """
+    mse = np.mean((true_values - predicted_values) ** 2, axis=1)
+
+    # Get the indices of the n worst MSE values (highest MSE)
+    best_indices = np.argsort(mse)[0:n]
+
+    return best_indices
 
 def mse_statistics(true_values, predicted_values):
     """
@@ -473,21 +496,43 @@ def plot_predictions_with_cond_vectors(predictions, cond_vectors, num_rows=20):
     plt.tight_layout()
     plt.show()
 
+#def calculate_metrics(wavelengths, intensities):
+#    """Calculate mean wavelength, FWHM, and FWTM."""
+#    intensities_changed = intensities.copy()
+#    intensities_changed += abs(min(intensities))
+#    mean_wavelength = np.sum(wavelengths * intensities_changed) / np.sum(intensities_changed)
+#    std_deviation = np.sqrt(np.sum(intensities_changed * (wavelengths - mean_wavelength) ** 2) / np.sum(intensities_changed))
+    
+#    half_max = (max(intensities_changed) + min(intensities_changed)) / 2
+#    indices_above_half_max = np.where(intensities_changed >= half_max)[0]
+#    fwhm_start = wavelengths[indices_above_half_max[0]]
+#    fwhm_end = wavelengths[indices_above_half_max[-1]]
+#    fwhm = fwhm_end - fwhm_start
+
+#    tenth_max = (max(intensities_changed) + min(intensities_changed)) / 10
+#    indices_above_tenth_max = np.where(intensities_changed >= tenth_max)[0]
+#    fwtm_start = wavelengths[indices_above_tenth_max[0]]
+#    fwtm_end = wavelengths[indices_above_tenth_max[-1]]
+#    fwtm = fwtm_end - fwtm_start
+
+#    return mean_wavelength, std_deviation, fwhm, fwhm_start, fwhm_end, fwtm, fwtm_start, fwtm_end
+
 def calculate_metrics(wavelengths, intensities):
     """Calculate mean wavelength, FWHM, and FWTM."""
-    intensities_changed = intensities.copy()
-    intensities_changed += abs(min(intensities))
-    mean_wavelength = np.sum(wavelengths * intensities_changed) / np.sum(intensities_changed)
-    std_deviation = np.sqrt(np.sum(intensities_changed * (wavelengths - mean_wavelength) ** 2) / np.sum(intensities_changed))
+    sum_int = np.sum(intensities)
+    if sum_int == 0:
+        sum_int = 1e-8
+    mean_wavelength = np.sum(wavelengths * intensities) / sum_int
+    std_deviation = np.sqrt(np.sum(intensities * (wavelengths - mean_wavelength) ** 2) / sum_int)
     
-    half_max = (max(intensities_changed) + min(intensities_changed)) / 2
-    indices_above_half_max = np.where(intensities_changed >= half_max)[0]
+    half_max = (max(intensities) + min(intensities)) / 2
+    indices_above_half_max = np.where(intensities >= half_max)[0]
     fwhm_start = wavelengths[indices_above_half_max[0]]
     fwhm_end = wavelengths[indices_above_half_max[-1]]
     fwhm = fwhm_end - fwhm_start
 
-    tenth_max = (max(intensities_changed) + min(intensities_changed)) / 10
-    indices_above_tenth_max = np.where(intensities_changed >= tenth_max)[0]
+    tenth_max = (max(intensities) + min(intensities)) / 10
+    indices_above_tenth_max = np.where(intensities >= tenth_max)[0]
     fwtm_start = wavelengths[indices_above_tenth_max[0]]
     fwtm_end = wavelengths[indices_above_tenth_max[-1]]
     fwtm = fwtm_end - fwtm_start

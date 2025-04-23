@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
-from evaluate import normalize_sampled_vectors, predict, save_predictions
+from evaluate import predict, save_predictions
 from metrics import calculate_dtw_distances, calculate_wasserstein_distance
 
 
@@ -17,16 +17,8 @@ def setup_logging(run_name):
     os.makedirs(os.path.join("results", run_name), exist_ok=True)
     os.makedirs(os.path.join("predictions", run_name), exist_ok=True)
 
-def normalize_vectors(vectors, device):
-    """Normalizes input vectors between -1 and 1."""
-    lower_bound = vectors.min(dim=-1, keepdim=True)[0]
-    upper_bound = vectors.max(dim=-1, keepdim=True)[0]
-    norm_min = torch.tensor([-1], device=device).reshape(-1, 1)
-    norm_max = torch.tensor([1], device=device).reshape(-1, 1)
-    return norm_min + (vectors - lower_bound) * (norm_max - norm_min) / (upper_bound - lower_bound)
 
 def save_samples(epoch, 
-                 scale_predictor, 
                  sampler, 
                  wavelengths,
                  args,
@@ -34,7 +26,6 @@ def save_samples(epoch,
                  model=None
                 ):
     """Generates and saves samples using the trained model."""
-    predicted_max_scale = scale_predictor(args.sample_settings).detach()
 
     if s_type == 'ddim':
         sampled_intensities = sampler.ddim_sample_loop(model=model,
@@ -54,7 +45,7 @@ def save_samples(epoch,
                                     settings_dim=args.settings_dim
                                     )
   
-    sampled_intensities = normalize_sampled_vectors(sampled_intensities, args.device, predicted_max_scale)
+    #sampled_intensities = normalize_sampled_vectors(sampled_intensities, args.device)
 
     results_dir = os.path.join("results", args.run_name)
     
@@ -111,15 +102,13 @@ def save_images(intensities, true_intensities, settings, wavelengths, base_path,
         plot_and_save(intensities_np, f"{base_path}_range.jpg")
 
 
-def save_model(args, ema_model, optimizer, scale_predictor, epoch=""):
+def save_model(args, ema_model, optimizer, epoch=""):
     """Saves model checkpoints."""
     model_path = os.path.join("models", args.run_name)
     torch.save(ema_model.state_dict(), os.path.join(model_path, f"ema_ckpt{epoch}.pt"))
     torch.save(optimizer.state_dict(), os.path.join(model_path, f"optim{epoch}.pt"))
-    torch.save(scale_predictor.state_dict(), os.path.join(model_path, f"scale_predictor{epoch}.pt"))
 
 def evaluate_and_save_metrics(model, 
-                              scale_predictor, 
                               sampler, 
                               dataloader, 
                               device, 
@@ -130,7 +119,6 @@ def evaluate_and_save_metrics(model,
     # Get predictions
     x_real, cond_vectors, predictions = predict(
         model,
-        scale_predictor,
         sampler,
         dataloader,
         device=device,
@@ -173,8 +161,8 @@ def evaluate_and_save_metrics(model,
         f.write(f"Mean DTW Distance: {mean_dtw:.6f}\n")
         f.write("-" * 50 + "\n")
 
-def save_training_loss(epoch, loss_value, scale_loss_value, args):
-    """Saves training loss and scale loss after each epoch to a file."""
+def save_training_loss(epoch, loss_value, args):
+    """Saves training loss after each epoch to a file."""
     loss_file_path = os.path.join("predictions", args.run_name, "training_loss.txt")
     os.makedirs(os.path.dirname(loss_file_path), exist_ok=True)
 
@@ -185,7 +173,6 @@ def save_training_loss(epoch, loss_value, scale_loss_value, args):
     with open(loss_file_path, mode) as f:
         f.write(f"Epoch: {epoch}\n")
         f.write(f"Training Loss: {loss_value:.6f}\n")
-        f.write(f"Scale Loss: {scale_loss_value:.6f}\n")
         f.write("-" * 50 + "\n")
 
 

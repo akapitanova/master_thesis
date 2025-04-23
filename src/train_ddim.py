@@ -12,10 +12,10 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
-from modules import EMA, UNet_conditional, MaxScalePredictor
+from modules import EMA, UNet_conditional
 from diffusion import prepare_noise_schedule, GaussianDiffusion, SpacedDiffusion
 from dataset import CustomDataset, get_data
-from train_utils import setup_logging, normalize_vectors, save_samples, save_images, save_model, evaluate_and_save_metrics, save_training_loss
+from train_utilsWsp import setup_logging, save_samples, save_images, save_model, evaluate_and_save_metrics, save_training_loss
 
 
 def train(args, model=None, finetune=False):
@@ -53,15 +53,10 @@ def train(args, model=None, finetune=False):
         optimizer = optim.AdamW(model.parameters(), lr=args.lr)
 
     #---------------------------------------------------------------------------
-
-    scale_predictor = MaxScalePredictor(input_dim=args.settings_dim).to(device)
-    scale_optimizer = optim.AdamW(scale_predictor.parameters(), lr=args.lr)
     
     scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs*steps_per_epoch)
-    scale_scheduler = CosineAnnealingLR(scale_optimizer, T_max=args.epochs * steps_per_epoch)
     
     mse = nn.MSELoss()
-    scale_loss_fn = nn.MSELoss()
     
     betas = prepare_noise_schedule(args.noise_steps,
                                    args.beta_start,
@@ -85,7 +80,6 @@ def train(args, model=None, finetune=False):
     ema_model = copy.deepcopy(model).eval().requires_grad_(False).to(device)
 
     model.train().requires_grad_(True)
-    scale_predictor.train()
 
     # Training loop
     for epoch in range(1, args.epochs + 1):
@@ -95,22 +89,6 @@ def train(args, model=None, finetune=False):
         for i, data in enumerate(pbar):
             intensities = data['data'].to(device)
             settings = data['settings'].to(device)
-
-            # Compute true max scale
-            true_max_scale = intensities.max(dim=-1, keepdim=True)[0].squeeze(-1)
-
-            # Normalize the spectrum
-            normalized_intensities = normalize_vectors(intensities, device)
-
-            # **Train max scale predictor based on the conditional vector**
-            predicted_scale = scale_predictor(settings)
-            scale_loss = scale_loss_fn(predicted_scale, true_max_scale)
-
-            scale_optimizer.zero_grad()
-            scale_loss.backward()
-            scale_optimizer.step()
-
-            scale_scheduler.step()
 
             # classifier-free guidance
             if np.random.random() < args.cfg_scale_train:
@@ -134,28 +112,34 @@ def train(args, model=None, finetune=False):
 
             pbar.set_postfix({
                                 "Loss": "{:.4f}".format(loss.item()),
-                                "Scale_Loss": "{:.4f}".format(scale_loss.item())
                             })
 
             logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
-            logger.add_scalar("Scale Loss", scale_loss.item(), global_step=epoch * l + i)
 
         # Save samples periodically
         if args.sample_freq and epoch % args.sample_freq == 0:
-            save_samples(epoch, scale_predictor, sampler, wavelengths, args, s_type='ddim', model=ema_model)
+            save_samples(epoch, sampler, wavelengths, args, s_type='ddim', model=ema_model)
 
         # Save model after each epoch
-        save_model(args, ema_model, optimizer, scale_predictor, epoch)
+        save_model(args, ema_model, optimizer, epoch)
 
         # evaluate on val data
-        evaluate_and_save_metrics(ema_model, scale_predictor, sampler, val_dataloader, device, epoch, "ddim", args)
+        if args.evaluation: 
+            if args.epochs <= 10:
+                evaluate_and_save_metrics(ema_model, sampler, val_dataloader, device, epoch, "ddim", args)
+            elif epoch == 1:
+                evaluate_and_save_metrics(ema_model, sampler, val_dataloader, device, epoch, "ddim", args)
+            elif args.epochs <= 20 and epoch % 2 == 0:
+                evaluate_and_save_metrics(ema_model, sampler, val_dataloader, device, epoch, "ddim", args)
+            elif epoch % 10 == 0:
+                evaluate_and_save_metrics(ema_model, sampler, val_dataloader, device, epoch, "ddim", args)
         
         # Save training loss after each epoch
-        save_training_loss(epoch, loss.item(), scale_loss.item(), args)
+        save_training_loss(epoch, loss.item(), args)
 
     # Save final samples and model
-    save_samples(epoch, scale_predictor, sampler, wavelengths, args, s_type='ddim', model=model)
-    save_model(args, ema_model, optimizer, scale_predictor)
+    save_samples(epoch, sampler, wavelengths, args, s_type='ddim', model=model)
+    save_model(args, ema_model, optimizer)
     
 
 def launch():
@@ -232,7 +216,7 @@ def launch():
                         help="Path to training data")
     parser.add_argument("--val_data_path", 
                         type=str, 
-                        default="../data/val_data_stg7_norm.csv", 
+                        default="../data/val_data_stg7_clipped.csv", 
                         help="Path to validation data")
     parser.add_argument("--sample_spectrum_path", 
                         type=str, 
@@ -246,6 +230,10 @@ def launch():
                         type=int, 
                         default=40, 
                         help="Section counts for SpacedDiffusion")
+    parser.add_argument("--evaluation",
+                        action=argparse.BooleanOptionalAction,
+                        default=True,
+                        help="Enable evaluation (default: True)")
 
     args = parser.parse_args()
 

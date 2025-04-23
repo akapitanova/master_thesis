@@ -4,7 +4,8 @@ import os
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from sklearn.utils import shuffle
+
+import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
@@ -13,23 +14,18 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
-from modules import EMA, EDMPrecond, MaxScalePredictor
+from modules import EMA, EDMPrecond
 from diffusion import EdmSampler
-from train_utils import setup_logging, normalize_vectors, save_samples, save_images, save_model, evaluate_and_save_metrics, save_training_loss
+from train_utils import setup_logging, save_samples, save_images, save_model, evaluate_and_save_metrics, save_training_loss
 from dataset import CustomDataset, get_data
 from loss import EDMLoss
-from evaluate import normalize_sampled_vectors
-
-
 
 def train(args, model=None, finetune=False):
     setup_logging(args.run_name)
     device = args.device
     
     # Load dataset
-    x_train, y_train = args.intensities, args.settings
-    x_train, y_train = shuffle(x_train, y_train, random_state=42)
-    train_dataset = CustomDataset(x_train, y_train)
+    train_dataset = CustomDataset(args.intensities, args.settings)
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
 
     # Load the val dataset
@@ -52,22 +48,16 @@ def train(args, model=None, finetune=False):
                            device          = device,
                            dropout_rate    = args.dropout_rate
                            ).to(device)
-        optimizer = optim.AdamW(model.parameters(), lr=0.001)
-
-    else:
-        optimizer = optim.AdamW(model.parameters(), lr=0.001)
+        
+    optimizer = optim.AdamW(model.parameters(), lr=args.lr)
 
     #---------------------------------------------------------------------------
-    scale_predictor = MaxScalePredictor(input_dim=args.settings_dim).to(device)
-    scale_optimizer = optim.AdamW(scale_predictor.parameters(), lr=0.01)
 
     sampler = EdmSampler(net=model, num_steps=args.noise_steps)
 
-    scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs * steps_per_epoch, eta_min = 0)
-    scale_scheduler = CosineAnnealingLR(scale_optimizer, T_max=args.epochs * steps_per_epoch, eta_min = 0)
+    scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs * steps_per_epoch)
 
     loss_fn = EDMLoss()
-    scale_loss_fn = nn.MSELoss()
 
     logger = SummaryWriter(os.path.join("runs", args.run_name))
 
@@ -75,7 +65,6 @@ def train(args, model=None, finetune=False):
     ema_model = copy.deepcopy(model).eval().requires_grad_(False).to(device)
 
     model.train().requires_grad_(True)
-    scale_predictor.train()
     
     # Training loop
     for epoch in range(1, args.epochs + 1):
@@ -86,31 +75,12 @@ def train(args, model=None, finetune=False):
             intensities = data['data'].to(device)
             settings = data['settings'].to(device)
 
-            # Compute true max scale
-            true_max_scale = intensities.max(dim=-1, keepdim=True)[0].squeeze(-1)
-
-            # Normalize the spectrum
-            normalized_intensities = normalize_vectors(intensities, device)
-            
-            # **Train max scale predictor based on the conditional vector**
-            predicted_scale = scale_predictor(settings)
-            scale_loss = scale_loss_fn(predicted_scale, true_max_scale)
-
-            scale_optimizer.zero_grad()
-            scale_loss.backward()
-            scale_optimizer.step()
-
-            scale_scheduler.step()
-
             # classifier-free guidance
             if np.random.random() < args.cfg_scale_train:
                 settings = None
                 
             # training step
-            loss = loss_fn(net=model, 
-                           y=normalized_intensities, 
-                           #predicted_scale=predicted_scale.detach(), 
-                           settings=settings)
+            loss = loss_fn(net=model, y=intensities, settings=settings)
 
             optimizer.zero_grad()
             loss.mean().backward()
@@ -122,27 +92,33 @@ def train(args, model=None, finetune=False):
             
             pbar.set_postfix({
                                 "Loss": "{:.4f}".format(loss.mean()),
-                                "Scale_Loss": "{:.4f}".format(scale_loss.item())
                             })
             logger.add_scalar("Loss", loss.mean(), global_step=epoch * l + i)
-            logger.add_scalar("Scale Loss", scale_loss.item(), global_step=epoch * l + i)
 
         # Save samples periodically
         if args.sample_freq and epoch % args.sample_freq == 0:
-            save_samples(epoch, scale_predictor, sampler, wavelengths, args)
+            save_samples(epoch, sampler, wavelengths, args)
 
         # Save model after each epoch
-        save_model(args, ema_model, optimizer, scale_predictor, epoch)
+        save_model(args, ema_model, optimizer, epoch)
 
         # evaluate on val data
-        evaluate_and_save_metrics(model, scale_predictor, sampler, val_dataloader, device, epoch, "edm", args)
+        if args.evaluation: 
+            if args.epochs <= 10:
+                evaluate_and_save_metrics(ema_model, sampler, val_dataloader, device, epoch, "edm", args)
+            elif epoch == 1:
+                evaluate_and_save_metrics(ema_model, sampler, val_dataloader, device, epoch, "edm", args)
+            elif args.epochs <= 20 and epoch % 2 == 0:
+                evaluate_and_save_metrics(ema_model, sampler, val_dataloader, device, epoch, "edm", args)
+            elif epoch % 10 == 0:
+                evaluate_and_save_metrics(ema_model, sampler, val_dataloader, device, epoch, "edm", args)
 
         # Save training loss after each epoch
-        save_training_loss(epoch, loss.mean(), scale_loss.item(), args)
+        save_training_loss(epoch, loss.mean(), args)
 
     # Save final samples and model
-    save_samples(epoch, scale_predictor, sampler, wavelengths, args)
-    save_model(args, ema_model, optimizer, scale_predictor)
+    save_samples(epoch, sampler, wavelengths, args)
+    save_model(args, ema_model, optimizer)
 
 
 def launch():    
@@ -211,7 +187,7 @@ def launch():
                         help="Path to training data")
     parser.add_argument("--val_data_path", 
                         type=str, 
-                        default="../data/val_data_stg7_norm.csv", 
+                        default="../data/val_data_stg7_clipped.csv", 
                         help="Path to validation data")
     parser.add_argument("--sample_spectrum_path", 
                         type=str, 
@@ -221,6 +197,10 @@ def launch():
                         type=int, 
                         default=3, 
                         help="Number of settings (conditioning vector size)")
+    parser.add_argument("--evaluation",
+                        action=argparse.BooleanOptionalAction,
+                        default=True,
+                        help="Enable evaluation (default: True)")
     
     args = parser.parse_args()
 

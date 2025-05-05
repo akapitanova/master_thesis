@@ -58,14 +58,7 @@ def save_samples(epoch,
         epoch
     )
 
-def save_images(intensities, true_intensities, settings, wavelengths, base_path, epoch):
-    """Saves predicted intensities as images with different visualization options."""
-    
-    settings_str = ', '.join([f"{val:.2f}" for val in settings[0].tolist()])
-    intensities_np = np.array(intensities)[:, 0, :]  # Convert to NumPy & remove batch dim if necessary
-    n_samples = len(intensities_np)
-    
-    def plot_and_save(predicted, filename, title_suffix=""):
+def plot_and_save(predicted, filename, title_suffix=""):
         """Helper function to plot predictions and save the image."""
         plt.figure(figsize=(12, 6), dpi=300)
         
@@ -89,6 +82,15 @@ def save_images(intensities, true_intensities, settings, wavelengths, base_path,
         plt.legend()
         plt.savefig(filename, dpi=300)
         plt.close()
+
+def save_images(intensities, true_intensities, settings, wavelengths, base_path, epoch):
+    """Saves predicted intensities as images with different visualization options."""
+    
+    settings_str = ', '.join([f"{val:.2f}" for val in settings[0].tolist()])
+    intensities_np = np.array(intensities)[:, 0, :]  # Convert to NumPy & remove batch dim if necessary
+    n_samples = len(intensities_np)
+    
+    
 
     # Save different versions based on the number of predictions
     if n_samples == 1:

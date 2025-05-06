@@ -1,4 +1,4 @@
-# SIMULATION OF HIGH-POWER LASER SPECTRA USING GENERATIVE MACHINE LEARNING
+# Simulation of High-Power Laser Spectra Using Generative Machine Learning
 
 This project is a Master thesis by **Anna Kapitanova**, exploring the use of conditional diffusion-based generative models—specifically DDIM and EDM—for simulating the spectral output of the high-power L1-Allegra laser system. The goal was to create a digital twin capable of generating realistic spectral profiles based on experimental system parameters.
 
@@ -130,3 +130,6 @@ Diffusion model techniques used in this project are inspired by the **DDIM** and
 
 The implementation of the EDM model is based on the official NVIDIA code release:  
 🔗 [https://github.com/NVlabs/edm](https://github.com/NVlabs/edm)
+
+The implementation of the DDIM model is based on the official diffusion autoencoder code release:
+🔗 [https://github.com/phizaz/diffae)](https://github.com/phizaz/diffae)

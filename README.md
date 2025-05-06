@@ -108,7 +108,7 @@ python src/train_ddim.py \
 python src/train_ddim.py --help
 ```
 
-## 📊 Results Visualizations
+## 📊 Results and Visualizations
 See the evaluated trained models using these notebooks in `src/`:
 
 - `evaluate_edm.ipynb` — EDM validation results  

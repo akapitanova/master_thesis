@@ -43,7 +43,7 @@ pip install -r requirements.txt
 #### 🔍 View Available Arguments
 
 ```bash
-master\_thesis/
+master_thesis/
 ├── data/                  # Processed datasets (CSV, NPY)
 ├── preprocessing/         # Notebooks for cleaning, normalizing, and splitting data
 ├── src/                   # Source code for models, training, and evaluation
@@ -132,4 +132,4 @@ The implementation of the EDM model is based on the official NVIDIA code release
 🔗 [https://github.com/NVlabs/edm](https://github.com/NVlabs/edm)
 
 The implementation of the DDIM model is based on the official diffusion autoencoder code release:
-🔗 [https://github.com/phizaz/diffae)](https://github.com/phizaz/diffae)
+🔗 [https://github.com/phizaz/diffae](https://github.com/phizaz/diffae)

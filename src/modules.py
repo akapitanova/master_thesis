@@ -235,12 +235,12 @@ class UNet_conditional(nn.Module):
 
 class EDMPrecond(torch.nn.Module):
     def __init__(self,
-                 resolution      = 1024,                     # Image resolution.
-                 settings_dim    = 13,                # Number of class labels, 0 = unconditional.
-                 sigma_min       = 0,                # Minimum supported noise level.
-                 sigma_max       = float('inf'),     # Maximum supported noise level.
-                 sigma_data      = 0.5,              # Expected standard deviation of the training data.
-                 model_type      = 'UNet_conditional',   # Class name of the underlying model.
+                 resolution      = 1024,                     
+                 settings_dim    = 13, # Number of class labels, 0 = unconditional.
+                 sigma_min       = 0,  # Minimum supported noise level.
+                 sigma_max       = float('inf'), # Maximum supported noise level.
+                 sigma_data      = 0.5, # Expected standard deviation of the training data.
+                 model_type      = 'UNet_conditional', # Class name of the underlying model.
                  device          = 'cuda',
                  dropout_rate    = 0.05
     ):

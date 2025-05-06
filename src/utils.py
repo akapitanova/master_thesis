@@ -26,18 +26,15 @@ def create_spectrogram(wavelengths,
     Returns:
         None: Displays the spectrogram.
     """
-    # Flatten the wavelengths and intensities into paired values
+
     all_wavelengths = np.tile(wavelengths, len(intensities))
     all_intensities = np.concatenate(intensities)
 
-    # Define bins for the 2D histogram
     wavelength_bins = np.linspace(min(wavelengths), max(wavelengths), len(wavelengths) + 1)
     intensity_bins = np.linspace(min(all_intensities), max(all_intensities), 100)
 
-    # Create 2D histogram
     histogram, x_edges, y_edges = np.histogram2d(all_wavelengths, all_intensities, bins=[wavelength_bins, intensity_bins])
-
-    # Plot the spectrogram with a logarithmic color scale
+    
     plt.figure(figsize=(12, 6), dpi=300)
     plt.pcolormesh(x_edges, 
                    y_edges, 
@@ -76,7 +73,6 @@ def create_difference_spectrogram(wavelengths,
     # Compute the differences
     intensity_differences = np.concatenate(real_intensities) - np.concatenate(predicted_intensities)
 
-    # Flatten wavelengths for histogram
     all_wavelengths = np.tile(wavelengths, len(real_intensities))
 
     wavelength_bins = np.linspace(min(wavelengths), max(wavelengths), len(wavelengths) + 1)
@@ -118,7 +114,6 @@ def create_combined_spectrogram(wavelengths, real, predicted):
     Returns:
         None: Displays the combined spectrogram.
     """
-    # Flatten wavelengths and intensities
     all_wavelengths = np.tile(wavelengths, len(real))
     all_real = np.concatenate(real)
     all_predicted = np.concatenate(predicted)
@@ -131,13 +126,11 @@ def create_combined_spectrogram(wavelengths, real, predicted):
     signed_differences = np.array(real) - np.array(predicted)
     all_signed_differences = np.concatenate(signed_differences)
 
-    # Define bins for the histograms
     wavelength_bins = np.linspace(min(wavelengths), max(wavelengths), len(wavelengths) + 1)
     intensity_bins = np.linspace(min(all_real), max(all_real), 100)
     abs_difference_bins = np.linspace(min(all_abs_differences), max(all_abs_differences), 100)
     signed_difference_bins = np.linspace(min(all_signed_differences), max(all_signed_differences), 100)
 
-    # Create histograms
     hist_real, _, _ = np.histogram2d(all_wavelengths, all_real, bins=[wavelength_bins, intensity_bins])
     hist_predicted, _, _ = np.histogram2d(all_wavelengths, all_predicted, bins=[wavelength_bins, intensity_bins])
     hist_abs_difference, _, _ = np.histogram2d(all_wavelengths, all_abs_differences,
@@ -145,7 +138,6 @@ def create_combined_spectrogram(wavelengths, real, predicted):
     hist_signed_difference, _, _ = np.histogram2d(all_wavelengths, all_signed_differences,
                                                   bins=[wavelength_bins, signed_difference_bins])
 
-    # Plot the combined spectrogram
     fig, axes = plt.subplots(2, 2, figsize=(14, 8), dpi=300)  # 2x2 grid
 
     # Top-left: Original spectrogram
@@ -207,10 +199,8 @@ def plot_random_intensity_vectors(wavelengths,
     random_vectors = predictions[random_indices]
     random_cond_vectors = cond_vectors[random_indices]
 
-    # Plot the selected vectors
     plt.figure(figsize=(12, 6))
     for i, (vector, cond_vector) in enumerate(zip(random_vectors, random_cond_vectors)):
-        # Create the conditional vector string for the label
         cond_str = ', '.join([f"{val:.2f}" for val in cond_vector])
         plt.plot(wavelengths, vector, label=f"Vector {i+1} | Cond: [{cond_str}]")
 
@@ -249,14 +239,10 @@ def plot_combined_intensity_vectors_with_parameters(wavelengths,
 
     fig, axes = plt.subplots(num_vectors, 1, figsize=(8, 4 * num_vectors), sharex=True, sharey=True, dpi=300)
 
-    # If only one row (num_vectors=1), ensure axes is iterable
     if num_vectors == 1:
         axes = [axes]
 
-    # Plot the vectors
     for i, ax in enumerate(axes):
-        
-        # Plot true and predicted vectors
         ax.plot(wavelengths, selected_real[i], label='True', color='tab:blue')
         ax.plot(wavelengths, selected_predicted[i], label='Predicted', color='tab:orange')
         
@@ -299,7 +285,6 @@ def get_worst_mse_indices(true_values,
     """
     mse = np.mean((true_values - predicted_values) ** 2, axis=1)
 
-    # Get the indices of the n worst MSE values (highest MSE)
     worst_indices = np.argsort(mse)[-n:]
 
     return worst_indices
@@ -313,7 +298,6 @@ def get_best_mse_indices(true_values,
     """
     mse = np.mean((true_values - predicted_values) ** 2, axis=1)
 
-    # Get the indices of the n worst MSE values (highest MSE)
     best_indices = np.argsort(mse)[0:n]
 
     return best_indices
@@ -330,10 +314,8 @@ def mse_statistics(true_values, predicted_values):
     Returns:
         dict: A dictionary containing statistical measures of the MSE.
     """
-    # Calculate the Mean Squared Error for each pair of vectors
     mse = np.mean((true_values - predicted_values) ** 2, axis=1)
 
-    # Compute descriptive statistics
     descriptive_stats = {
         "Mean": np.mean(mse),
         "Median": np.median(mse),
@@ -343,7 +325,6 @@ def mse_statistics(true_values, predicted_values):
         "Range": np.max(mse) - np.min(mse),
     }
 
-    # Compute boxplot statistics
     Q1 = np.percentile(mse, 25)
     Q2 = np.median(mse)
     Q3 = np.percentile(mse, 75)
@@ -371,7 +352,6 @@ def mse_statistics(true_values, predicted_values):
         else:
             print(f"{key}: {value:.4f}" if isinstance(value, (float, int)) else f"{key}: {value}")
 
-    # Create boxplot of MSE values
     plt.figure(figsize=(12, 6), dpi=300)
     plt.boxplot(mse, vert=False, patch_artist=True, boxprops=dict(facecolor='lightblue'))
     plt.title("Boxplot of MSE Values")
@@ -434,7 +414,6 @@ def analyze_mse_and_cond_vectors(mse,
         }
         return stats
 
-    # Calculate statistics for both high and low MSE conditional vectors
     high_mse_stats = calculate_statistics(high_mse_cond_vectors)
     low_mse_stats = calculate_statistics(low_mse_cond_vectors)
 
@@ -496,27 +475,6 @@ def plot_predictions_with_cond_vectors(predictions, cond_vectors, num_rows=20):
     plt.tight_layout()
     plt.show()
 
-#def calculate_metrics(wavelengths, intensities):
-#    """Calculate mean wavelength, FWHM, and FWTM."""
-#    intensities_changed = intensities.copy()
-#    intensities_changed += abs(min(intensities))
-#    mean_wavelength = np.sum(wavelengths * intensities_changed) / np.sum(intensities_changed)
-#    std_deviation = np.sqrt(np.sum(intensities_changed * (wavelengths - mean_wavelength) ** 2) / np.sum(intensities_changed))
-    
-#    half_max = (max(intensities_changed) + min(intensities_changed)) / 2
-#    indices_above_half_max = np.where(intensities_changed >= half_max)[0]
-#    fwhm_start = wavelengths[indices_above_half_max[0]]
-#    fwhm_end = wavelengths[indices_above_half_max[-1]]
-#    fwhm = fwhm_end - fwhm_start
-
-#    tenth_max = (max(intensities_changed) + min(intensities_changed)) / 10
-#    indices_above_tenth_max = np.where(intensities_changed >= tenth_max)[0]
-#    fwtm_start = wavelengths[indices_above_tenth_max[0]]
-#    fwtm_end = wavelengths[indices_above_tenth_max[-1]]
-#    fwtm = fwtm_end - fwtm_start
-
-#    return mean_wavelength, std_deviation, fwhm, fwhm_start, fwhm_end, fwtm, fwtm_start, fwtm_end
-
 def calculate_metrics(wavelengths, intensities):
     """Calculate mean wavelength, FWHM, and FWTM."""
     sum_int = np.sum(intensities)
@@ -543,20 +501,16 @@ def calculate_metrics_errors(wavelengths, x_real, predictions):
     """Calculate metrics for each pair of vectors and compute MSE and MAE for each metric."""
     num_samples = x_real.shape[0]
 
-    # Initialize lists to store metrics
     metrics_real = []
     metrics_pred = []
-
-    # Calculate metrics for each pair of vectors
+    
     for i in range(num_samples):
         metrics_real.append(calculate_metrics(wavelengths, x_real[i]))
         metrics_pred.append(calculate_metrics(wavelengths, predictions[i]))
 
-    # Convert to numpy arrays for easier manipulation
     metrics_real = np.array(metrics_real)
     metrics_pred = np.array(metrics_pred)
 
-    # Calculate MSE and MAE for each metric
     mse_results = {}
     mae_results = {}
     metric_names = ["mean_wavelength", "std_deviation", "fwhm", "fwhm_start", "fwhm_end", "fwtm", "fwtm_start", "fwtm_end"]
@@ -567,7 +521,6 @@ def calculate_metrics_errors(wavelengths, x_real, predictions):
         mse_results[name] = mse
         mae_results[name] = mae
 
-    # Print results in a table
     table_data = [[metric, f"{mse_results[metric]:.6f}", f"{mae_results[metric]:.6f}"] for metric in metric_names]
     print(tabulate(table_data, headers=["Metric", "MSE", "MAE"], tablefmt="grid"))
 
@@ -587,20 +540,14 @@ def plot_comparison(index, wavelengths, x_real, predictions, cond_vectors):
     Returns:
         None: Displays the plot with subplots.
     """
-    
-
-    # Extract the real and predicted intensity vectors for the given index
     real_intensities = x_real[index]
     predicted_intensities = predictions[index]
 
-    # Calculate metrics for real and predicted intensity vectors
     real_metrics = calculate_metrics(wavelengths, real_intensities)
     pred_metrics = calculate_metrics(wavelengths, predicted_intensities)
 
-    # Set up the subplot
     fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
 
-    # Plot the real intensity vector
     axes[0].plot(wavelengths, real_intensities, label='Real Intensity')
     axes[0].axvline(real_metrics[0], color='red', linestyle='--', label=f'Mean Wavelength: {real_metrics[0]:.2f} nm')
     axes[0].axvline(real_metrics[3], color='green', linestyle=':', label=f'FWHM Start: {real_metrics[3]:.2f} nm')
@@ -627,7 +574,6 @@ def plot_comparison(index, wavelengths, x_real, predictions, cond_vectors):
     axes[0].legend()
     axes[0].grid(True)
 
-    # Plot the predicted intensity vector
     axes[1].plot(wavelengths, predicted_intensities, label='Predicted Intensity')
     axes[1].axvline(pred_metrics[0], color='red', linestyle='--', label=f'Mean Wavelength: {pred_metrics[0]:.2f} nm')
     axes[1].axvline(pred_metrics[3], color='green', linestyle=':', label=f'FWHM Start: {pred_metrics[3]:.2f} nm')

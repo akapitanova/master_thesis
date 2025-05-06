@@ -11,7 +11,6 @@ from metrics import calculate_dtw_distances, calculate_wasserstein_distance
 
 
 def calculate_metrics(x_real, predictions, print_results=True):
-    # Compute metrics
     mse_error = np.mean((x_real - predictions) ** 2, axis=1)
     mean_mse = np.mean(mse_error)
     wasserstein_distances, mean_wasserstein = calculate_wasserstein_distance(x_real, predictions)
@@ -19,7 +18,6 @@ def calculate_metrics(x_real, predictions, print_results=True):
     mean_dtw = np.mean(dtw_distances)
 
     if print_results:
-        # Print metrics
         print(f"MSE error: {mean_mse:.6f}")
         print(f"Mean Wasserstein Distance: {mean_wasserstein:.6f}")
         print(f"Mean DTW Distance: {mean_dtw:.6f}")
@@ -37,12 +35,10 @@ def save_predictions(x_real, cond_vectors, predictions, predictions_path):
         predictions (list or numpy array): Model-generated predictions.
         predictions_path (str): Path to save the CSV file.
     """
-    # Convert lists of lists into CSV-friendly string format
     x_real_str = [','.join(map(str, row)) for row in x_real]
     cond_vectors_str = [','.join(map(str, row)) for row in cond_vectors]
     preds_str = [','.join(map(str, row)) for row in predictions]
-    
-    # Create and save dataframe
+
     df = pd.DataFrame({'x_real': x_real_str, 'cond_vectors': cond_vectors_str, 'predictions': preds_str})
     df.to_csv(predictions_path, index=False)
     print(f"Predictions saved to {predictions_path}")
@@ -113,7 +109,6 @@ def evaluate(device,
     """
     Evaluate predictions
     """
-    # Load the model and sampler
     if s_type == 'edm':
         model = EDMPrecond(device=device).to(device)
         ckpt = torch.load(model_path,

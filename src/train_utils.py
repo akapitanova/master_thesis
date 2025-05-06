@@ -44,8 +44,6 @@ def save_samples(epoch,
                                     cfg_scale=args.cfg_scale,
                                     settings_dim=args.settings_dim
                                     )
-  
-    #sampled_intensities = normalize_sampled_vectors(sampled_intensities, args.device)
 
     results_dir = os.path.join("results", args.run_name)
     
@@ -62,10 +60,8 @@ def plot_and_save(predicted, filename, title_suffix=""):
         """Helper function to plot predictions and save the image."""
         plt.figure(figsize=(12, 6), dpi=300)
         
-        # Plot true spectrum
         plt.plot(wavelengths, true_intensities, color='tab:orange', label="True spectrum", linewidth=2)
         
-        # Plot predictions
         if predicted.ndim == 1:  # Single prediction case
             plt.plot(wavelengths, predicted, color='tab:blue', alpha=1, label="Predicted sample 1")
         elif predicted.shape[0] == 2:  # Two predictions case
@@ -87,12 +83,9 @@ def save_images(intensities, true_intensities, settings, wavelengths, base_path,
     """Saves predicted intensities as images with different visualization options."""
     
     settings_str = ', '.join([f"{val:.2f}" for val in settings[0].tolist()])
-    intensities_np = np.array(intensities)[:, 0, :]  # Convert to NumPy & remove batch dim if necessary
+    intensities_np = np.array(intensities)[:, 0, :]
     n_samples = len(intensities_np)
     
-    
-
-    # Save different versions based on the number of predictions
     if n_samples == 1:
         plot_and_save(intensities_np[0], f"{base_path}_1vector.jpg")
     elif n_samples == 2:
@@ -118,7 +111,7 @@ def evaluate_and_save_metrics(model,
                               s_type, 
                               args, 
                               file_name= "metrics_all_epochs.txt"):
-    # Get predictions
+
     x_real, cond_vectors, predictions = predict(
         model,
         sampler,
@@ -130,24 +123,19 @@ def evaluate_and_save_metrics(model,
         settings_dim=args.settings_dim
     )
 
-    # Compute MSE
     mse_error = np.mean((x_real - predictions) ** 2)
     print(f"MSE error: {mse_error:.6f}")
-    
-    # Compute Wasserstein Distance
+
     wasserstein_distances, mean_wasserstein = calculate_wasserstein_distance(x_real, predictions)
     print(f"Mean Wasserstein Distance: {mean_wasserstein:.6f}")
-    
-    # Compute DTW Distance
+
     dtw_distances = calculate_dtw_distances(x_real, predictions)
     mean_dtw = np.mean(dtw_distances)
     print(f"Mean DTW Distance: {mean_dtw:.6f}")
-    
-    # Save predictions as CSV
+
     predictions_path = os.path.join("predictions", args.run_name, f"preds_epoch{epoch}.csv")
     save_predictions(x_real, cond_vectors, predictions, predictions_path)
 
-    # Save metrics to a text file
     metrics_file_path = os.path.join("predictions", args.run_name, file_name)
     os.makedirs(os.path.dirname(metrics_file_path), exist_ok=True)
     
@@ -156,7 +144,6 @@ def evaluate_and_save_metrics(model,
         mode = 'w'
     
     with open(metrics_file_path, mode) as f:
-        # Append the results to the file
         f.write(f"Epoch: {epoch}\n")
         f.write(f"MSE Error: {mse_error:.6f}\n")
         f.write(f"Mean Wasserstein Distance: {mean_wasserstein:.6f}\n")

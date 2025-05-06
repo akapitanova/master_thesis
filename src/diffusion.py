@@ -474,17 +474,6 @@ def space_timesteps(num_timesteps, section_counts):
     return set(all_steps)
 
 def transform_vector(vector):
-    
-    # Normalize values
-    #min_val = torch.min(vector, dim=-1, keepdim=True).values
-    #max_val = torch.max(vector, dim=-1, keepdim=True).values
-
-    #norm_min = 0
-    #norm_max = 1200
-
-    #normalized_vector = norm_min + (vector - min_val) * (norm_max - norm_min) / (max_val - min_val)
-
-    #return normalized_vector
     vector = (vector.clamp(-1, 1) + 1) / 2
     vector = vector * 1200
 

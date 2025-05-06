@@ -286,16 +286,3 @@ class EDMPrecond(torch.nn.Module):
 
 #----------------------------------------------------------------------------
 
-class MaxScalePredictor(nn.Module):
-    def __init__(self, input_dim=13):
-        super(MaxScalePredictor, self).__init__()
-        self.net = nn.Sequential(
-            nn.Linear(input_dim, 64),
-            nn.ReLU(),
-            nn.Linear(64, 32),
-            nn.ReLU(),
-            nn.Linear(32, 1) 
-        )
-
-    def forward(self, x):
-        return torch.tanh(self.net(x)).squeeze(-1)
